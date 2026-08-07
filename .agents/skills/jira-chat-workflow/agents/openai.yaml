@@ -1,0 +1,4 @@
+interface:
+  display_name: "CHAT Jira Workflow"
+  short_description: "CHAT Jira 티켓 생성과 티켓 기반 개발 워크플로"
+  default_prompt: "Use $jira-chat-workflow to create or implement a CHAT Jira ticket."
