@@ -1,6 +1,6 @@
 # Spring 기반 무중단 대용량 채팅 시스템 (`spring-chat`)
 
-PostgreSQL, Apache Kafka, Apache Flink, Redis 및 Spring Boot 3.x 기반의 고성능, 확장 가능한 무중단 대용량 실시간 채팅 시스템입니다.
+PostgreSQL, Apache Kafka, Redis 및 Spring Boot 4.1 기반의 고성능, 확장 가능한 무중단 대용량 실시간 채팅 시스템입니다.
 
 ---
 
@@ -31,9 +31,8 @@ spring-chat/
 ├── chat-common/       # DTO, Enums (RoomType, MessageType), ErrorCode, Exception
 ├── chat-core/         # JPA Entities, Repositories, Business Services
 ├── chat-api/          # REST API Controllers (User, Room Management, Message History)
-├── chat-ws/           # WebSocket / STOMP Gateway, Kafka Producer, Session Manager
-├── chat-consumer/    # Kafka Consumer (PostgreSQL Bulk Persistence Worker)
-└── chat-analytics/   # Apache Flink Stream Processing (Real-time CEP & Aggregation)
+├── chat-ws/          # WebSocket / STOMP Gateway, Kafka Producer, Session Manager
+└── chat-consumer/    # Kafka Consumer (PostgreSQL Bulk Persistence Worker)
 ```
 
 ---
@@ -65,11 +64,6 @@ docker-compose up -d
   ```bash
   ./gradlew :chat-consumer:bootRun
   ```
-- **Flink Analytics Stream Job**:
-  ```bash
-  ./gradlew :chat-analytics:run
-  ```
-
 ---
 
 ## 🔌 API 명세 요약

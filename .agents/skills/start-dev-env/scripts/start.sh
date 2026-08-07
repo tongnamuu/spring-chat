@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== [1/2] Building Spring Boot 3.3 Java 25 JARs ==="
+echo "=== [1/2] Building Spring Boot 4.1 Java 25 JARs ==="
 export JAVA_HOME=/Users/taehyeongban/.sdkman/candidates/java/25-tem
 export PATH=$JAVA_HOME/bin:$PATH
 
