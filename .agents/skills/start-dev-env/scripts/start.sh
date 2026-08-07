@@ -2,7 +2,7 @@
 set -e
 
 echo "=== [1/2] Building Spring Boot 3.3 Java 25 JARs ==="
-export JAVA_HOME=/Users/taehyeongban/.sdkman/candidates/java/21.0.10-tem
+export JAVA_HOME=/Users/taehyeongban/.sdkman/candidates/java/25-tem
 export PATH=$JAVA_HOME/bin:$PATH
 ./gradlew build -x test
 
