@@ -1,0 +1,5 @@
+FROM eclipse-temurin:25-jdk
+WORKDIR /app
+COPY chat-consumer/build/libs/*.jar app.jar
+EXPOSE 8082
+ENTRYPOINT ["java", "-jar", "app.jar"]

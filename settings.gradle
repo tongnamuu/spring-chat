@@ -1,0 +1,8 @@
+rootProject.name = 'spring-chat'
+
+include 'chat-common'
+include 'chat-core'
+include 'chat-api'
+include 'chat-ws'
+include 'chat-consumer'
+include 'chat-analytics'

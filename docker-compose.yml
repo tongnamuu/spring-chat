@@ -1,0 +1,110 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: spring-chat-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - chat-api
+      - chat-ws
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: spring-chat-postgres
+    environment:
+      POSTGRES_DB: chatdb
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpassword
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatuser -d chatdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: spring-chat-redis
+    ports:
+      - "6379:6379"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: spring-chat-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: spring-chat-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  chat-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat-api
+    container_name: spring-chat-api
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
+      SPRING_DATASOURCE_USERNAME: chatuser
+      SPRING_DATASOURCE_PASSWORD: chatpassword
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  chat-ws:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat-ws
+    container_name: spring-chat-ws
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
+      SPRING_DATASOURCE_USERNAME: chatuser
+      SPRING_DATASOURCE_PASSWORD: chatpassword
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  chat-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat-consumer
+    container_name: spring-chat-consumer
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
+      SPRING_DATASOURCE_USERNAME: chatuser
+      SPRING_DATASOURCE_PASSWORD: chatpassword
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started

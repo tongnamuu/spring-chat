@@ -1,0 +1,12 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+springBoot {
+    mainClass = 'com.example.chat.consumer.ChatConsumerApplication'
+}
+
+dependencies {
+    implementation project(':chat-core')
+    implementation 'org.springframework.kafka:spring-kafka'
+}

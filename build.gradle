@@ -1,0 +1,41 @@
+plugins {
+    id 'org.springframework.boot' version '3.3.4' apply false
+    id 'io.spring.dependency-management' version '1.1.6' apply false
+}
+
+allprojects {
+    group = 'com.example.chat'
+    version = '0.0.1-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 21
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:3.3.4"
+            mavenBom "org.testcontainers:testcontainers-bom:1.20.1"
+        }
+    }
+
+    dependencies {
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+        testImplementation 'org.testcontainers:junit-jupiter'
+        testImplementation 'org.testcontainers:postgresql'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}
