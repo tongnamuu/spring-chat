@@ -2,14 +2,17 @@ package com.example.chat.ws.controller;
 
 import com.example.chat.common.dto.ChatMessageDto;
 import com.example.chat.common.enums.MessageType;
+import com.example.chat.core.security.ChatPrincipal;
 import com.example.chat.ws.producer.KafkaMessageProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
 import java.time.ZonedDateTime;
+import java.security.Principal;
 
 @Controller
 public class StompChatController {
@@ -25,7 +28,11 @@ public class StompChatController {
     }
 
     @MessageMapping("/chat/message")
-    public void message(ChatMessageDto message) {
+    public void message(ChatMessageDto message, Principal principal) {
+        ChatPrincipal chatPrincipal = authenticatedPrincipal(principal);
+        message.setSenderId(chatPrincipal.userId());
+        message.setSenderName(chatPrincipal.nickname());
+
         if (message.getCreatedAt() == null) {
             message.setCreatedAt(ZonedDateTime.now());
         }
@@ -44,5 +51,13 @@ public class StompChatController {
 
         // 2. Broadcast immediately to subscribers of this WebSocket node
         messagingTemplate.convertAndSend("/sub/chat/room/" + message.getRoomId(), message);
+    }
+
+    private ChatPrincipal authenticatedPrincipal(Principal principal) {
+        if (principal instanceof Authentication authentication
+                && authentication.getPrincipal() instanceof ChatPrincipal chatPrincipal) {
+            return chatPrincipal;
+        }
+        throw new IllegalStateException("Authenticated chat principal is missing");
     }
 }

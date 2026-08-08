@@ -7,6 +7,8 @@ import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserController(UserRepository userRepository) {
+    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping
@@ -34,6 +38,7 @@ public class UserController {
         UserEntity user = UserEntity.builder()
                 .username(request.getUsername())
                 .nickname(request.getNickname())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .build();
 
         UserEntity saved = userRepository.save(user);
@@ -62,11 +67,16 @@ public class UserController {
         @NotBlank(message = "Nickname is required")
         private String nickname;
 
+        @NotBlank(message = "Password is required")
+        @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+        private String password;
+
         public CreateUserRequest() {}
 
-        public CreateUserRequest(String username, String nickname) {
+        public CreateUserRequest(String username, String nickname, String password) {
             this.username = username;
             this.nickname = nickname;
+            this.password = password;
         }
 
         public String getUsername() { return username; }
@@ -74,5 +84,8 @@ public class UserController {
 
         public String getNickname() { return nickname; }
         public void setNickname(String nickname) { this.nickname = nickname; }
+
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
     }
 }

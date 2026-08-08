@@ -4,18 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spring Realtime Chat Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="/webjars/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="/webjars/stomp-websocket/2.3.4/stomp.min.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
         body { background: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
         
         /* Sidebar */
         .sidebar { width: 320px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
-        .sidebar-header h2 { font-size: 1.1rem; font-weight: 700; color: #38bdf8; }
-        .user-badge { font-size: 0.85rem; background: #334155; padding: 6px 12px; border-radius: 20px; color: #cbd5e1; }
+        .sidebar-header { padding: 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .sidebar-header h2 { flex: none; font-size: 1.1rem; font-weight: 700; color: #38bdf8; white-space: nowrap; }
+        .user-controls { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+        .user-badge { min-width: 0; font-size: 0.85rem; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .logout-button { flex: none; display: none; border: 1px solid #475569; background: transparent; color: #cbd5e1; padding: 6px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+        .logout-button:hover { background: #334155; color: white; }
         
         .action-buttons { padding: 15px; display: flex; gap: 10px; border-bottom: 1px solid #334155; }
         .btn { flex: 1; padding: 10px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
@@ -56,11 +58,17 @@
 
         /* Modal */
         .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
-        .modal { background: #1e293b; padding: 28px; border-radius: 16px; width: 400px; border: 1px solid #334155; }
+        .modal { background: #1e293b; padding: 28px; border-radius: 8px; width: min(400px, calc(100vw - 32px)); border: 1px solid #334155; }
         .modal h3 { margin-bottom: 16px; color: #38bdf8; }
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #cbd5e1; }
         .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 8px; background: #0f172a; border: 1px solid #334155; color: white; outline: none; }
+        .form-error { min-height: 20px; margin: -6px 0 12px; color: #fda4af; font-size: 0.82rem; }
+        @media (max-width: 720px) {
+            body { overflow: auto; }
+            .sidebar { width: 100%; min-height: 100vh; }
+            .chat-area { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -69,7 +77,10 @@
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>Spring Chat</h2>
-            <div class="user-badge" id="userBadge">로그인 필요</div>
+            <div class="user-controls">
+                <div class="user-badge" id="userBadge">로그인 필요</div>
+                <button class="logout-button" id="logoutButton" type="button" onclick="logout()">로그아웃</button>
+            </div>
         </div>
 
         <div class="action-buttons">
@@ -91,7 +102,7 @@
                 <p id="currentRoomMeta">소식함</p>
             </div>
             <div class="status-indicator" id="statusIndicator">
-                <span class="dot"></span> <span id="statusText">WS Connecting...</span>
+                <span class="dot"></span> <span id="statusText">로그인 후 연결</span>
             </div>
         </div>
 
@@ -108,16 +119,17 @@
     <!-- Login Modal -->
     <div class="modal-overlay" id="loginModal" style="display: flex;">
         <div class="modal">
-            <h3>사용자 로그인 / 생성</h3>
+            <h3>Spring Chat 로그인</h3>
             <div class="form-group">
                 <label>아이디 (Username)</label>
-                <input type="text" id="usernameInput" value="user1">
+                <input type="text" id="usernameInput" autocomplete="username">
             </div>
             <div class="form-group">
-                <label>닉네임 (Nickname)</label>
-                <input type="text" id="nicknameInput" value="홍길동">
+                <label>비밀번호 (Password)</label>
+                <input type="password" id="passwordInput" autocomplete="current-password" onkeypress="handleLoginKeyPress(event)">
             </div>
-            <button class="btn btn-primary" style="width:100%" onclick="login()">입장하기</button>
+            <div class="form-error" id="loginError" role="alert"></div>
+            <button class="btn btn-primary" id="loginButton" style="width:100%" onclick="login()">로그인</button>
         </div>
     </div>
 
@@ -168,37 +180,90 @@
         let activeRoom = null;
         let stompClient = null;
         let currentSubscription = null;
+        let reconnectTimer = null;
+        let shouldReconnect = false;
+        let historyLoading = false;
+        let pendingRoomMessages = [];
 
         async function login() {
-            const username = document.getElementById('usernameInput').value;
-            const nickname = document.getElementById('nicknameInput').value;
+            const username = document.getElementById('usernameInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+            const loginButton = document.getElementById('loginButton');
+            const loginError = document.getElementById('loginError');
+            loginError.innerText = '';
+            loginButton.disabled = true;
             try {
-                const res = await fetch('/api/users', {
+                const res = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, nickname })
+                    body: JSON.stringify({ username, password })
                 });
                 if (res.ok) {
                     currentUser = await res.json();
                 } else {
-                    const getRes = await fetch(`/api/users/1`);
-                    if (getRes.ok) currentUser = await getRes.json();
-                    else currentUser = { userId: 1, username, nickname };
+                    loginError.innerText = '아이디 또는 비밀번호가 올바르지 않습니다.';
+                    return;
                 }
-                document.getElementById('userBadge').innerText = currentUser.nickname + ` (#${currentUser.userId})`;
-                document.getElementById('loginModal').style.display = 'none';
+                showAuthenticatedUser();
                 initWebSocket();
                 loadMyRooms();
             } catch (e) {
-                currentUser = { userId: 1, username, nickname };
-                document.getElementById('userBadge').innerText = nickname;
-                document.getElementById('loginModal').style.display = 'none';
-                initWebSocket();
-                loadMyRooms();
+                loginError.innerText = '로그인 서버에 연결할 수 없습니다.';
+            } finally {
+                loginButton.disabled = false;
             }
         }
 
+        async function restoreSession() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (!res.ok) return;
+                currentUser = await res.json();
+                showAuthenticatedUser();
+                initWebSocket();
+                loadMyRooms();
+            } catch (e) {
+                console.log('No active login session');
+            }
+        }
+
+        function showAuthenticatedUser() {
+            document.getElementById('userBadge').innerText = currentUser.nickname + ` (#${currentUser.userId})`;
+            document.getElementById('logoutButton').style.display = 'inline-block';
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('passwordInput').value = '';
+        }
+
+        async function logout() {
+            shouldReconnect = false;
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            if (currentSubscription) {
+                currentSubscription.unsubscribe();
+                currentSubscription = null;
+            }
+            if (stompClient && stompClient.connected) {
+                stompClient.disconnect(() => {});
+            }
+            stompClient = null;
+            await fetch('/api/auth/logout', { method: 'POST' });
+            currentUser = null;
+            activeRoom = null;
+            document.getElementById('userBadge').innerText = '로그인 필요';
+            document.getElementById('logoutButton').style.display = 'none';
+            document.getElementById('statusIndicator').classList.remove('connected');
+            document.getElementById('statusText').innerText = '로그인 후 연결';
+            document.getElementById('roomList').innerHTML = '';
+            document.getElementById('loginModal').style.display = 'flex';
+            document.getElementById('usernameInput').focus();
+        }
+
+        function handleLoginKeyPress(e) {
+            if (e.key === 'Enter') login();
+        }
+
         function initWebSocket() {
+            if (!currentUser) return;
+            shouldReconnect = true;
             const socket = new SockJS('/ws-stomp');
             stompClient = Stomp.over(socket);
             
@@ -216,18 +281,20 @@
                 const indicator = document.getElementById('statusIndicator');
                 indicator.classList.remove('connected');
                 document.getElementById('statusText').innerText = 'WS Reconnecting...';
-                setTimeout(initWebSocket, 3000);
+                if (shouldReconnect && currentUser) {
+                    reconnectTimer = setTimeout(initWebSocket, 3000);
+                }
             });
         }
 
         async function loadMyRooms() {
             if (!currentUser) return;
-            const res = await fetch('/api/rooms/my', {
-                headers: { 'X-User-Id': currentUser.userId }
-            });
+            const res = await fetch('/api/rooms/my');
             if (res.ok) {
                 const rooms = await res.json();
                 renderRoomList(rooms);
+            } else if (res.status === 401) {
+                await logout();
             }
         }
 
@@ -254,6 +321,8 @@
 
         async function selectRoom(room, isFirstJoin = false) {
             activeRoom = room;
+            historyLoading = true;
+            pendingRoomMessages = [];
             document.getElementById('currentRoomTitle').innerText = room.title;
             document.getElementById('currentRoomMeta').innerText = `초대코드: ${room.inviteCode} | 인원: ${room.currentCount}/${room.maxCapacity}명`;
             document.getElementById('messageInput').disabled = false;
@@ -262,13 +331,14 @@
             subscribeToRoom(room.roomId, isFirstJoin);
 
             // Load History
-            const res = await fetch(`/api/rooms/${room.roomId}/messages`, {
-                headers: { 'X-User-Id': currentUser.userId }
-            });
+            const res = await fetch(`/api/rooms/${room.roomId}/messages`);
             if (res.ok) {
                 const msgs = await res.json();
                 renderMessages(msgs.reverse());
             }
+            historyLoading = false;
+            pendingRoomMessages.forEach(message => appendMessage(message));
+            pendingRoomMessages = [];
         }
 
         function subscribeToRoom(roomId, isFirstJoin = false) {
@@ -282,15 +352,17 @@
 
             currentSubscription = stompClient.subscribe(`/sub/chat/room/${roomId}`, function (msg) {
                 const messageDto = JSON.parse(msg.body);
-                appendMessage(messageDto);
+                if (historyLoading && activeRoom && activeRoom.roomId === roomId) {
+                    pendingRoomMessages.push(messageDto);
+                } else {
+                    appendMessage(messageDto);
+                }
             });
 
             // Only send ENTER event if it's the brand new first join
             if (isFirstJoin) {
                 stompClient.send('/pub/chat/message', {}, JSON.stringify({
                     roomId: roomId,
-                    senderId: currentUser.userId,
-                    senderName: currentUser.nickname,
                     messageType: 'ENTER'
                 }));
             }
@@ -336,8 +408,6 @@
 
             const dto = {
                 roomId: activeRoom.roomId,
-                senderId: currentUser.userId,
-                senderName: currentUser.nickname,
                 messageType: 'TALK',
                 content: content
             };
@@ -362,7 +432,7 @@
 
             const res = await fetch('/api/rooms', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUser.userId },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title, roomType, maxCapacity })
             });
 
@@ -380,7 +450,7 @@
             const inviteCode = document.getElementById('inviteCodeInput').value.trim();
             const res = await fetch('/api/rooms/join', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUser.userId },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ inviteCode })
             });
 
@@ -393,6 +463,8 @@
                 alert('입장 실패');
             }
         }
+
+        window.addEventListener('DOMContentLoaded', restoreSession);
     </script>
 </body>
 </html>
