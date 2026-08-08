@@ -25,7 +25,7 @@ public class UserEntity {
     @Column(name = "nickname", nullable = false, length = 50)
     private String nickname;
 
-    @Column(name = "password_hash", length = 100)
+    @Column(name = "password_hash", nullable = false, length = 100)
     private String passwordHash;
 
     @CreationTimestamp
@@ -38,7 +38,7 @@ public class UserEntity {
         this.userId = userId;
         this.username = username;
         this.nickname = nickname;
-        this.passwordHash = passwordHash;
+        this.passwordHash = requirePasswordHash(passwordHash);
         this.createdAt = createdAt;
     }
 
@@ -56,10 +56,17 @@ public class UserEntity {
     public void setNickname(String nickname) { this.nickname = nickname; }
 
     public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = requirePasswordHash(passwordHash); }
 
     public ZonedDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(ZonedDateTime createdAt) { this.createdAt = createdAt; }
+
+    private static String requirePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("Password hash is required");
+        }
+        return passwordHash;
+    }
 
     public static class Builder {
         private Long userId;
