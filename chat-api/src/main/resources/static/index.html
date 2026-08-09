@@ -62,9 +62,19 @@
         .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
         .modal { background: #1e293b; padding: 28px; border-radius: 8px; width: min(400px, calc(100vw - 32px)); border: 1px solid #334155; }
         .modal h3 { margin-bottom: 16px; color: #38bdf8; }
+        .auth-modal { width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+        .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 24px; padding: 4px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; }
+        .auth-tab { min-height: 40px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-weight: 700; cursor: pointer; }
+        .auth-tab.active { background: #334155; color: #f8fafc; }
+        .auth-panel[hidden] { display: none; }
+        .auth-success { display: none; margin-bottom: 16px; padding: 12px; border: 1px solid #166534; border-radius: 6px; background: #052e16; color: #bbf7d0; font-size: 0.85rem; line-height: 1.5; }
+        .auth-success.visible { display: block; }
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #cbd5e1; }
         .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 8px; background: #0f172a; border: 1px solid #334155; color: white; outline: none; }
+        .form-group input:focus { border-color: #38bdf8; }
+        .field-hint { margin-top: 5px; color: #94a3b8; font-size: 0.75rem; line-height: 1.4; }
+        .field-error { min-height: 17px; margin-top: 5px; color: #fda4af; font-size: 0.76rem; line-height: 1.35; }
         .form-error { min-height: 20px; margin: -6px 0 12px; color: #fda4af; font-size: 0.82rem; }
         .withdraw-warning { margin-bottom: 16px; color: #fecaca; font-size: 0.9rem; line-height: 1.5; }
         .confirm-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 16px; color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; }
@@ -128,18 +138,55 @@
 
     <!-- Login Modal -->
     <div class="modal-overlay" id="loginModal" style="display: flex;">
-        <div class="modal">
-            <h3>Spring Chat 로그인</h3>
-            <div class="form-group">
-                <label>아이디 (Username)</label>
-                <input type="text" id="usernameInput" autocomplete="username">
+        <div class="modal auth-modal">
+            <div class="auth-tabs" role="tablist" aria-label="계정 메뉴">
+                <button class="auth-tab active" id="loginTab" type="button" role="tab" aria-selected="true" onclick="showAuthView('login')">로그인</button>
+                <button class="auth-tab" id="signupTab" type="button" role="tab" aria-selected="false" onclick="showAuthView('signup')">회원가입</button>
             </div>
-            <div class="form-group">
-                <label>비밀번호 (Password)</label>
-                <input type="password" id="passwordInput" autocomplete="current-password" onkeypress="handleLoginKeyPress(event)">
-            </div>
-            <div class="form-error" id="loginError" role="alert"></div>
-            <button class="btn btn-primary" id="loginButton" style="width:100%" onclick="login()">로그인</button>
+            <div class="auth-success" id="authSuccess" role="status"></div>
+
+            <section class="auth-panel" id="loginPanel" role="tabpanel" aria-labelledby="loginTab">
+                <h3>Spring Chat 로그인</h3>
+                <div class="form-group">
+                    <label for="usernameInput">아이디</label>
+                    <input type="text" id="usernameInput" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="passwordInput">비밀번호</label>
+                    <input type="password" id="passwordInput" autocomplete="current-password" onkeypress="handleLoginKeyPress(event)">
+                </div>
+                <div class="form-error" id="loginError" role="alert"></div>
+                <button class="btn btn-primary" id="loginButton" style="width:100%" onclick="login()">로그인</button>
+            </section>
+
+            <section class="auth-panel" id="signupPanel" role="tabpanel" aria-labelledby="signupTab" hidden>
+                <h3>계정 만들기</h3>
+                <div class="form-group">
+                    <label for="signupUsernameInput">아이디</label>
+                    <input type="text" id="signupUsernameInput" autocomplete="username" aria-describedby="signupUsernameHint signupUsernameError">
+                    <p class="field-hint" id="signupUsernameHint">3~30자 아이디 또는 50자 이내 이메일</p>
+                    <div class="field-error" id="signupUsernameError"></div>
+                </div>
+                <div class="form-group">
+                    <label for="signupNicknameInput">닉네임</label>
+                    <input type="text" id="signupNicknameInput" autocomplete="nickname" aria-describedby="signupNicknameHint signupNicknameError">
+                    <p class="field-hint" id="signupNicknameHint">앞뒤 공백 없이 2~20자</p>
+                    <div class="field-error" id="signupNicknameError"></div>
+                </div>
+                <div class="form-group">
+                    <label for="signupPasswordInput">비밀번호</label>
+                    <input type="password" id="signupPasswordInput" autocomplete="new-password" aria-describedby="signupPasswordHint signupPasswordError">
+                    <p class="field-hint" id="signupPasswordHint">8~72자, 영문과 숫자를 각각 하나 이상 포함</p>
+                    <div class="field-error" id="signupPasswordError"></div>
+                </div>
+                <div class="form-group">
+                    <label for="signupPasswordConfirmInput">비밀번호 확인</label>
+                    <input type="password" id="signupPasswordConfirmInput" autocomplete="new-password" onkeypress="handleSignupKeyPress(event)" aria-describedby="signupPasswordConfirmError">
+                    <div class="field-error" id="signupPasswordConfirmError"></div>
+                </div>
+                <div class="form-error" id="signupError" role="alert"></div>
+                <button class="btn btn-primary" id="signupButton" style="width:100%" onclick="signup()">회원가입</button>
+            </section>
         </div>
     </div>
 
@@ -215,12 +262,110 @@
         let historyLoading = false;
         let pendingRoomMessages = [];
 
+        const signupFieldErrors = {
+            username: 'signupUsernameError',
+            nickname: 'signupNicknameError',
+            password: 'signupPasswordError'
+        };
+
+        function showAuthView(view, preserveSuccess = false) {
+            const loginSelected = view === 'login';
+            document.getElementById('loginPanel').hidden = !loginSelected;
+            document.getElementById('signupPanel').hidden = loginSelected;
+            document.getElementById('loginTab').classList.toggle('active', loginSelected);
+            document.getElementById('signupTab').classList.toggle('active', !loginSelected);
+            document.getElementById('loginTab').setAttribute('aria-selected', String(loginSelected));
+            document.getElementById('signupTab').setAttribute('aria-selected', String(!loginSelected));
+            document.getElementById('loginError').innerText = '';
+            clearSignupErrors();
+            if (!preserveSuccess) setAuthSuccess('');
+            (loginSelected
+                ? document.getElementById('usernameInput')
+                : document.getElementById('signupUsernameInput')).focus();
+        }
+
+        function setAuthSuccess(message) {
+            const success = document.getElementById('authSuccess');
+            success.innerText = message;
+            success.classList.toggle('visible', Boolean(message));
+        }
+
+        function clearSignupErrors() {
+            Object.values(signupFieldErrors).forEach(id => document.getElementById(id).innerText = '');
+            document.getElementById('signupPasswordConfirmError').innerText = '';
+            document.getElementById('signupError').innerText = '';
+        }
+
+        async function signup() {
+            const username = document.getElementById('signupUsernameInput').value;
+            const nickname = document.getElementById('signupNicknameInput').value;
+            const password = document.getElementById('signupPasswordInput').value;
+            const passwordConfirm = document.getElementById('signupPasswordConfirmInput').value;
+            const signupButton = document.getElementById('signupButton');
+            clearSignupErrors();
+            setAuthSuccess('');
+
+            if (password !== passwordConfirm) {
+                document.getElementById('signupPasswordConfirmError').innerText = '비밀번호가 일치하지 않습니다.';
+                return;
+            }
+
+            signupButton.disabled = true;
+            try {
+                const response = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, nickname, password })
+                });
+                const body = await response.json();
+                if (!response.ok) {
+                    if (body.errors) {
+                        Object.entries(body.errors).forEach(([field, message]) => {
+                            const target = signupFieldErrors[field];
+                            if (target) document.getElementById(target).innerText = translateSignupError(field, message);
+                        });
+                    } else if (response.status === 409) {
+                        document.getElementById('signupUsernameError').innerText = '이미 사용 중인 아이디입니다.';
+                    } else {
+                        document.getElementById('signupError').innerText = '회원가입을 처리할 수 없습니다.';
+                    }
+                    return;
+                }
+
+                document.getElementById('usernameInput').value = body.username;
+                document.getElementById('passwordInput').value = '';
+                document.getElementById('signupPasswordInput').value = '';
+                document.getElementById('signupPasswordConfirmInput').value = '';
+                setAuthSuccess('회원가입이 완료되었습니다. 비밀번호를 입력해 로그인하세요.');
+                showAuthView('login', true);
+                document.getElementById('passwordInput').focus();
+            } catch (e) {
+                document.getElementById('signupError').innerText = '회원가입 서버에 연결할 수 없습니다.';
+            } finally {
+                signupButton.disabled = false;
+            }
+        }
+
+        function translateSignupError(field, message) {
+            const messages = {
+                username: '3~30자의 영문·숫자·밑줄 아이디 또는 올바른 이메일을 입력해 주세요.',
+                nickname: '닉네임은 앞뒤 공백 없이 2~20자로 입력해 주세요.',
+                password: '비밀번호는 8~72자이며 영문과 숫자를 각각 포함해야 합니다.'
+            };
+            return messages[field] || message;
+        }
+
+        function handleSignupKeyPress(e) {
+            if (e.key === 'Enter') signup();
+        }
+
         async function login() {
             const username = document.getElementById('usernameInput').value.trim();
             const password = document.getElementById('passwordInput').value;
             const loginButton = document.getElementById('loginButton');
             const loginError = document.getElementById('loginError');
             loginError.innerText = '';
+            setAuthSuccess('');
             loginButton.disabled = true;
             try {
                 const res = await fetch('/api/auth/login', {
@@ -297,6 +442,7 @@
             document.getElementById('messageInput').disabled = true;
             document.getElementById('sendBtn').disabled = true;
             document.getElementById('loginModal').style.display = 'flex';
+            showAuthView('login');
             document.getElementById('usernameInput').focus();
         }
 

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -24,9 +25,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationException(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(error ->
+                errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
+
         Map<String, Object> body = new HashMap<>();
         body.put("code", "V001");
-        body.put("message", ex.getBindingResult().getAllErrors().get(0).getDefaultMessage());
+        body.put("message", errors.values().stream().findFirst().orElse("Request validation failed"));
+        body.put("errors", errors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
@@ -42,6 +48,7 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case USER_NOT_FOUND, ROOM_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case INVALID_PASSWORD -> HttpStatus.UNAUTHORIZED;
+            case USERNAME_ALREADY_EXISTS -> HttpStatus.CONFLICT;
             case ROOM_FULL, ALREADY_JOINED, INVALID_INVITE_CODE, INVALID_ROOM_CAPACITY, DIRECT_ROOM_INVALID -> HttpStatus.BAD_REQUEST;
             case NOT_ROOM_MEMBER -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

@@ -1,10 +1,13 @@
 package com.example.chat.api.controller;
 
+import com.example.chat.api.dto.SignupRequest;
+import com.example.chat.api.dto.SignupResponse;
 import com.example.chat.api.security.AuthenticationFailureResponse;
 import com.example.chat.common.dto.UserDto;
 import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
 import com.example.chat.core.security.ChatPrincipal;
+import com.example.chat.core.service.UserRegistrationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -34,15 +37,27 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
     private final UserRepository userRepository;
+    private final UserRegistrationService userRegistrationService;
 
     public AuthController(
             AuthenticationManager authenticationManager,
             SecurityContextRepository securityContextRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            UserRegistrationService userRegistrationService
     ) {
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
         this.userRepository = userRepository;
+        this.userRegistrationService = userRegistrationService;
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest signupRequest) {
+        UserEntity user = userRegistrationService.register(
+                signupRequest.username(),
+                signupRequest.password(),
+                signupRequest.nickname());
+        return ResponseEntity.status(HttpStatus.CREATED).body(SignupResponse.from(user));
     }
 
     @PostMapping("/login")
