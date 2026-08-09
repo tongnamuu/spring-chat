@@ -51,6 +51,16 @@ docker-compose up -d
 ./gradlew test
 ```
 
+로그인 브라우저 E2E는 전체 Docker 스택을 실행한 뒤 별도로 수행합니다:
+
+```bash
+cd e2e
+npm install
+npm test
+```
+
+성공 화면은 `artifacts/e2e/chat-1-login-success.png`에 저장됩니다.
+
 ### 3. 모듈별 실행
 - **REST API Server (8080 포트)**:
   ```bash
@@ -70,12 +80,19 @@ docker-compose up -d
 
 | Method | Endpoint | 설명 |
 | :--- | :--- | :--- |
-| `POST` | `/api/users` | 회원 생성 (username, nickname) |
-| `POST` | `/api/rooms` | 채팅방 개설 (`X-User-Id` 헤더 필요) |
+| `POST` | `/api/users` | 회원 생성 (username, nickname, password) |
+| `POST` | `/api/auth/login` | 로그인 및 Redis 세션 쿠키 발급 |
+| `GET` | `/api/auth/me` | 현재 로그인 사용자 조회 |
+| `POST` | `/api/auth/logout` | 서버 세션 무효화 |
+| `POST` | `/api/rooms` | 로그인 사용자의 채팅방 개설 |
 | `POST` | `/api/rooms/join` | 초대 코드로 방 입장 |
 | `GET` | `/api/rooms/my` | 내가 참여한 채팅방 목록 조회 |
 | `GET` | `/api/rooms/{roomId}/messages` | 이전 메시지 내역 조회 |
 | `GET` | `/api/rooms/{roomId}/sync` | 재연결 시 미수신 메시지 Gap 복구 |
-| `WS` | `/ws-stomp` | STOMP 웹소켓 핸드셰이크 엔드포인트 |
+| `WS` | `/ws-stomp` | Redis 로그인 세션이 필요한 STOMP 엔드포인트 |
 
 ---
+
+REST와 STOMP 모두 `CHAT_SESSION` HttpOnly 쿠키에서 사용자를 결정합니다. 클라이언트가 보낸
+`X-User-Id`, `senderId`, `senderName`은 사용자 식별에 사용하지 않습니다. HTTPS 배포에서는
+`SESSION_COOKIE_SECURE=true`를 설정해야 합니다.

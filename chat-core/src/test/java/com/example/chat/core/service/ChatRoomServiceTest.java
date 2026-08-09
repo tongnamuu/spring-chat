@@ -53,8 +53,16 @@ class ChatRoomServiceTest {
 
     @BeforeEach
     void setUp() {
-        user1 = userRepository.save(UserEntity.builder().username("user1").nickname("User One").build());
-        user2 = userRepository.save(UserEntity.builder().username("user2").nickname("User Two").build());
+        user1 = userRepository.save(UserEntity.builder()
+                .username("user1")
+                .nickname("User One")
+                .passwordHash("user1-password-hash")
+                .build());
+        user2 = userRepository.save(UserEntity.builder()
+                .username("user2")
+                .nickname("User Two")
+                .passwordHash("user2-password-hash")
+                .build());
     }
 
     @Test
@@ -120,7 +128,11 @@ class ChatRoomServiceTest {
         ChatRoomDto createdRoom = chatRoomService.createRoom(user1.getUserId(), createReq);
         chatRoomService.joinRoomByInviteCode(user2.getUserId(), createdRoom.getInviteCode());
 
-        UserEntity user3 = userRepository.save(UserEntity.builder().username("user3").nickname("User Three").build());
+        UserEntity user3 = userRepository.save(UserEntity.builder()
+                .username("user3")
+                .nickname("User Three")
+                .passwordHash("user3-password-hash")
+                .build());
 
         assertThatThrownBy(() -> chatRoomService.joinRoomByInviteCode(user3.getUserId(), createdRoom.getInviteCode()))
                 .isInstanceOf(ChatException.class)
