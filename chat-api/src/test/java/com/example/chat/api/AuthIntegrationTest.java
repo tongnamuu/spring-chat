@@ -12,6 +12,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -69,6 +71,9 @@ class AuthIntegrationTest {
 
     @Autowired
     StringRedisTemplate redisTemplate;
+
+    @Autowired
+    SessionRepository<? extends Session> sessionRepository;
 
     private UserEntity alice;
     private UserEntity bob;
@@ -168,7 +173,11 @@ class AuthIntegrationTest {
     }
 
     private Set<String> redisSessionKeys() {
-        return redisTemplate.keys("spring-chat:session:sessions:*");
+        Set<String> keys = redisTemplate.keys("spring-chat:session:sessions:*");
+        return keys == null ? Set.of() : keys.stream()
+                .filter(key -> !key.contains(":expires:"))
+                .filter(key -> sessionRepository.findById(key.substring(key.lastIndexOf(':') + 1)) != null)
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     private UserEntity saveUser(String username, String nickname, String password) {

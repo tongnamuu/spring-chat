@@ -3,13 +3,21 @@ package com.example.chat.api.controller;
 import com.example.chat.common.dto.UserDto;
 import com.example.chat.common.exception.ChatException;
 import com.example.chat.common.exception.ErrorCode;
+import com.example.chat.api.service.UserAccountService;
+import com.example.chat.api.service.UserSessionService;
 import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
+import com.example.chat.core.security.ChatPrincipal;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,14 +31,26 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserAccountService userAccountService;
+    private final UserSessionService userSessionService;
 
-    public UserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserController(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            UserAccountService userAccountService,
+            UserSessionService userSessionService
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.userAccountService = userAccountService;
+        this.userSessionService = userSessionService;
     }
 
     @PostMapping
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest request) {
+        if (request.getUsername().startsWith(UserEntity.WITHDRAWN_USERNAME + "-")) {
+            throw new ChatException(ErrorCode.ALREADY_JOINED, "Username is reserved");
+        }
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new ChatException(ErrorCode.ALREADY_JOINED, "Username already exists");
         }
@@ -52,12 +72,43 @@ public class UserController {
         return ResponseEntity.ok(convertToDto(user));
     }
 
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> withdraw(
+            @AuthenticationPrincipal ChatPrincipal principal,
+            @Valid @RequestBody WithdrawRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        userAccountService.withdraw(principal.userId(), request.password());
+
+        HttpSession currentSession = servletRequest.getSession(false);
+        if (currentSession != null) {
+            currentSession.invalidate();
+        }
+        userSessionService.invalidateAll(principal.username());
+        SecurityContextHolder.clearContext();
+        return ResponseEntity.noContent().build();
+    }
+
     private UserDto convertToDto(UserEntity user) {
+        if (user.isWithdrawn()) {
+            return UserDto.builder()
+                    .userId(user.getUserId())
+                    .username(UserEntity.WITHDRAWN_USERNAME)
+                    .nickname(UserEntity.WITHDRAWN_NICKNAME)
+                    .build();
+        }
         return UserDto.builder()
                 .userId(user.getUserId())
                 .username(user.getUsername())
                 .nickname(user.getNickname())
                 .build();
+    }
+
+    public record WithdrawRequest(
+            @NotBlank(message = "Password is required")
+            @Size(max = 72, message = "Password must not exceed 72 characters")
+            String password
+    ) {
     }
 
     public static class CreateUserRequest {

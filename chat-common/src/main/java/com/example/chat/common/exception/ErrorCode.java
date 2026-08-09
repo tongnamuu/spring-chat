@@ -2,6 +2,7 @@ package com.example.chat.common.exception;
 
 public enum ErrorCode {
     USER_NOT_FOUND("U001", "User not found"),
+    INVALID_PASSWORD("U002", "Password verification failed"),
     ROOM_NOT_FOUND("R001", "Chat room not found"),
     ROOM_FULL("R002", "Chat room exceeds maximum capacity (50)"),
     ALREADY_JOINED("R003", "User has already joined this room"),

@@ -1,5 +1,8 @@
 package com.example.chat.ws.config;
 
+import com.example.chat.common.enums.UserStatus;
+import com.example.chat.core.repository.UserRepository;
+import com.example.chat.core.security.ChatPrincipal;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -21,6 +24,12 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
             StompCommand.SUBSCRIBE
     );
 
+    private final UserRepository userRepository;
+
+    public StompAuthenticationChannelInterceptor(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = StompHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
@@ -29,7 +38,10 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
         }
 
         Principal user = accessor.getUser();
-        if (!(user instanceof Authentication authentication) || !authentication.isAuthenticated()) {
+        if (!(user instanceof Authentication authentication)
+                || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof ChatPrincipal principal)
+                || !userRepository.existsByUserIdAndStatus(principal.userId(), UserStatus.ACTIVE)) {
             throw new AccessDeniedException("Authenticated STOMP session required");
         }
         return message;

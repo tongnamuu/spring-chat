@@ -41,6 +41,7 @@ public class GlobalExceptionHandler {
     private HttpStatus getHttpStatus(ErrorCode errorCode) {
         return switch (errorCode) {
             case USER_NOT_FOUND, ROOM_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case INVALID_PASSWORD -> HttpStatus.UNAUTHORIZED;
             case ROOM_FULL, ALREADY_JOINED, INVALID_INVITE_CODE, INVALID_ROOM_CAPACITY, DIRECT_ROOM_INVALID -> HttpStatus.BAD_REQUEST;
             case NOT_ROOM_MEMBER -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
