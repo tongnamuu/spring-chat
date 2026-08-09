@@ -6,6 +6,7 @@ import com.example.chat.common.dto.CreateRoomRequest;
 import com.example.chat.common.enums.MessageType;
 import com.example.chat.common.enums.Role;
 import com.example.chat.common.enums.RoomType;
+import com.example.chat.common.enums.UserStatus;
 import com.example.chat.common.exception.ChatException;
 import com.example.chat.common.exception.ErrorCode;
 import com.example.chat.core.entity.ChatMessageEntity;
@@ -47,6 +48,7 @@ public class ChatRoomService {
     @Transactional
     public ChatRoomDto createRoom(Long userId, CreateRoomRequest request) {
         UserEntity creator = userRepository.findById(userId)
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ChatException(ErrorCode.USER_NOT_FOUND));
 
         int maxCapacity = request.getMaxCapacity() != null ? request.getMaxCapacity() : 50;
@@ -82,6 +84,7 @@ public class ChatRoomService {
         // If DIRECT chat, add target user as well
         if (request.getRoomType() == RoomType.DIRECT && request.getTargetUserId() != null) {
             UserEntity targetUser = userRepository.findById(request.getTargetUserId())
+                    .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                     .orElseThrow(() -> new ChatException(ErrorCode.USER_NOT_FOUND, "Target user not found"));
 
             ChatRoomMemberEntity targetMember = ChatRoomMemberEntity.builder()
@@ -101,6 +104,7 @@ public class ChatRoomService {
     @Transactional
     public ChatRoomDto joinRoomByInviteCode(Long userId, String inviteCode) {
         UserEntity user = userRepository.findById(userId)
+                .filter(candidate -> candidate.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ChatException(ErrorCode.USER_NOT_FOUND));
 
         ChatRoomEntity room = chatRoomRepository.findByInviteCode(inviteCode)
@@ -129,7 +133,7 @@ public class ChatRoomService {
 
     @Transactional(readOnly = true)
     public List<ChatRoomDto> getMyJoinedRooms(Long userId) {
-        if (!userRepository.existsById(userId)) {
+        if (!userRepository.existsByUserIdAndStatus(userId, UserStatus.ACTIVE)) {
             throw new ChatException(ErrorCode.USER_NOT_FOUND);
         }
         return chatRoomRepository.findJoinedRoomsByUserId(userId)
@@ -183,9 +187,10 @@ public class ChatRoomService {
     }
 
     private ChatMessageDto convertMessageToDto(ChatMessageEntity entity) {
-        String senderName = userRepository.findById(entity.getSenderId())
-                .map(UserEntity::getNickname)
-                .orElse("Unknown");
+        UserEntity sender = userRepository.findById(entity.getSenderId()).orElse(null);
+        boolean withdrawnSender = sender == null || sender.isWithdrawn();
+        String senderName = withdrawnSender ? UserEntity.WITHDRAWN_NICKNAME : sender.getNickname();
+        String content = withdrawnSender ? anonymizeSystemMessage(entity.getMessageType(), entity.getContent()) : entity.getContent();
 
         return ChatMessageDto.builder()
                 .messageId(entity.getMessageId())
@@ -193,8 +198,18 @@ public class ChatRoomService {
                 .senderId(entity.getSenderId())
                 .senderName(senderName)
                 .messageType(entity.getMessageType())
-                .content(entity.getContent())
+                .content(content)
                 .createdAt(entity.getCreatedAt())
                 .build();
+    }
+
+    private String anonymizeSystemMessage(MessageType messageType, String content) {
+        if (messageType == MessageType.ENTER) {
+            return UserEntity.WITHDRAWN_NICKNAME + "님이 입장하셨습니다.";
+        }
+        if (messageType == MessageType.LEAVE) {
+            return UserEntity.WITHDRAWN_NICKNAME + "님이 퇴장하셨습니다.";
+        }
+        return content;
     }
 }

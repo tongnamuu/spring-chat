@@ -1,5 +1,6 @@
 package com.example.chat.api.security;
 
+import com.example.chat.common.enums.UserStatus;
 import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
 import org.springframework.security.core.userdetails.User;
@@ -19,7 +20,7 @@ public class ApiUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserEntity user = userRepository.findByUsername(username)
+        UserEntity user = userRepository.findByUsernameAndStatus(username, UserStatus.ACTIVE)
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
 
         return User.withUsername(user.getUsername())

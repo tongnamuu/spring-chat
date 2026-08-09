@@ -35,3 +35,4 @@ spring:
     data:
       redis:
         namespace: spring-chat:session
+        repository-type: indexed

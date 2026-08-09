@@ -59,7 +59,8 @@ npm install
 npm test
 ```
 
-성공 화면은 `artifacts/e2e/chat-1-login-success.png`에 저장됩니다.
+성공 화면은 `artifacts/e2e/chat-1-login-success.png`와
+`artifacts/e2e/chat-2-withdrawal-success.png`에 저장됩니다.
 
 ### 3. 모듈별 실행
 - **REST API Server (8080 포트)**:
@@ -84,6 +85,7 @@ npm test
 | `POST` | `/api/auth/login` | 로그인 및 Redis 세션 쿠키 발급 |
 | `GET` | `/api/auth/me` | 현재 로그인 사용자 조회 |
 | `POST` | `/api/auth/logout` | 서버 세션 무효화 |
+| `DELETE` | `/api/users/me` | 비밀번호 재확인 후 회원 탈퇴 및 전체 세션 무효화 |
 | `POST` | `/api/rooms` | 로그인 사용자의 채팅방 개설 |
 | `POST` | `/api/rooms/join` | 초대 코드로 방 입장 |
 | `GET` | `/api/rooms/my` | 내가 참여한 채팅방 목록 조회 |
@@ -96,3 +98,7 @@ npm test
 REST와 STOMP 모두 `CHAT_SESSION` HttpOnly 쿠키에서 사용자를 결정합니다. 클라이언트가 보낸
 `X-User-Id`, `senderId`, `senderName`은 사용자 식별에 사용하지 않습니다. HTTPS 배포에서는
 `SESSION_COOKIE_SECURE=true`를 설정해야 합니다.
+
+회원 탈퇴는 사용자를 소프트 삭제하고 식별 정보를 익명화합니다. 참여 멤버십과 방 인원을 한
+트랜잭션에서 정리하고, OWNER는 가장 먼저 가입한 남은 멤버에게 이전합니다. 남은 멤버가 없는
+방은 삭제하지만 기존 `chat_message` 이력은 보존되며 조회 시 발신자를 `탈퇴한 사용자`로 표시합니다.

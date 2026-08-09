@@ -1,7 +1,9 @@
 package com.example.chat.core.repository;
 
 import com.example.chat.core.entity.ChatRoomEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +15,10 @@ import java.util.Optional;
 @Repository
 public interface ChatRoomRepository extends JpaRepository<ChatRoomEntity, Long> {
     Optional<ChatRoomEntity> findByInviteCode(String inviteCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM ChatRoomEntity r WHERE r.roomId = :roomId")
+    Optional<ChatRoomEntity> findByIdForUpdate(@Param("roomId") Long roomId);
 
     @Query("SELECT r FROM ChatRoomEntity r JOIN ChatRoomMemberEntity m ON r.roomId = m.roomId WHERE m.userId = :userId ORDER BY r.updatedAt DESC")
     List<ChatRoomEntity> findJoinedRoomsByUserId(@Param("userId") Long userId);

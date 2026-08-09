@@ -18,6 +18,8 @@
         .user-badge { min-width: 0; font-size: 0.85rem; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .logout-button { flex: none; display: none; border: 1px solid #475569; background: transparent; color: #cbd5e1; padding: 6px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
         .logout-button:hover { background: #334155; color: white; }
+        .withdraw-button { flex: none; display: none; border: 1px solid #7f1d1d; background: transparent; color: #fda4af; padding: 6px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+        .withdraw-button:hover { background: #7f1d1d; color: white; }
         
         .action-buttons { padding: 15px; display: flex; gap: 10px; border-bottom: 1px solid #334155; }
         .btn { flex: 1; padding: 10px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
@@ -64,6 +66,13 @@
         .form-group label { display: block; font-size: 0.85rem; margin-bottom: 6px; color: #cbd5e1; }
         .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 8px; background: #0f172a; border: 1px solid #334155; color: white; outline: none; }
         .form-error { min-height: 20px; margin: -6px 0 12px; color: #fda4af; font-size: 0.82rem; }
+        .withdraw-warning { margin-bottom: 16px; color: #fecaca; font-size: 0.9rem; line-height: 1.5; }
+        .confirm-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 16px; color: #cbd5e1; font-size: 0.85rem; line-height: 1.4; }
+        .confirm-row input { margin-top: 3px; }
+        .modal-actions { display: flex; gap: 10px; }
+        .btn-danger { background: #b91c1c; color: white; }
+        .btn-danger:hover { background: #991b1b; }
+        .btn-danger:disabled { cursor: not-allowed; opacity: 0.45; }
         @media (max-width: 720px) {
             body { overflow: auto; }
             .sidebar { width: 100%; min-height: 100vh; }
@@ -79,6 +88,7 @@
             <h2>Spring Chat</h2>
             <div class="user-controls">
                 <div class="user-badge" id="userBadge">로그인 필요</div>
+                <button class="withdraw-button" id="withdrawButton" type="button" onclick="openWithdrawalModal()">회원 탈퇴</button>
                 <button class="logout-button" id="logoutButton" type="button" onclick="logout()">로그아웃</button>
             </div>
         </div>
@@ -175,6 +185,26 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="withdrawModal">
+        <div class="modal">
+            <h3>회원 탈퇴</h3>
+            <p class="withdraw-warning">참여 중인 모든 채팅방에서 나가며 계정은 복구할 수 없습니다.</p>
+            <div class="form-group">
+                <label>현재 비밀번호</label>
+                <input type="password" id="withdrawPasswordInput" autocomplete="current-password" onkeypress="handleWithdrawalKeyPress(event)">
+            </div>
+            <label class="confirm-row">
+                <input type="checkbox" id="withdrawConfirm" onchange="updateWithdrawalButton()">
+                <span>회원 탈퇴와 채팅방 퇴장을 확인합니다.</span>
+            </label>
+            <div class="form-error" id="withdrawError" role="alert"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" type="button" onclick="closeWithdrawalModal()">취소</button>
+                <button class="btn btn-danger" id="confirmWithdrawButton" type="button" onclick="withdrawAccount()" disabled>탈퇴</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentUser = null;
         let activeRoom = null;
@@ -229,12 +259,19 @@
 
         function showAuthenticatedUser() {
             document.getElementById('userBadge').innerText = currentUser.nickname + ` (#${currentUser.userId})`;
+            document.getElementById('withdrawButton').style.display = 'inline-block';
             document.getElementById('logoutButton').style.display = 'inline-block';
             document.getElementById('loginModal').style.display = 'none';
             document.getElementById('passwordInput').value = '';
         }
 
         async function logout() {
+            disconnectRealtime();
+            await fetch('/api/auth/logout', { method: 'POST' });
+            resetToLogin();
+        }
+
+        function disconnectRealtime() {
             shouldReconnect = false;
             if (reconnectTimer) clearTimeout(reconnectTimer);
             if (currentSubscription) {
@@ -245,16 +282,73 @@
                 stompClient.disconnect(() => {});
             }
             stompClient = null;
-            await fetch('/api/auth/logout', { method: 'POST' });
+        }
+
+        function resetToLogin() {
             currentUser = null;
             activeRoom = null;
             document.getElementById('userBadge').innerText = '로그인 필요';
+            document.getElementById('withdrawButton').style.display = 'none';
             document.getElementById('logoutButton').style.display = 'none';
             document.getElementById('statusIndicator').classList.remove('connected');
             document.getElementById('statusText').innerText = '로그인 후 연결';
             document.getElementById('roomList').innerHTML = '';
+            document.getElementById('messagesContainer').innerHTML = '<div class="msg msg-system">채팅방에 참여하거나 선택해 주세요.</div>';
+            document.getElementById('messageInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
             document.getElementById('loginModal').style.display = 'flex';
             document.getElementById('usernameInput').focus();
+        }
+
+        function openWithdrawalModal() {
+            document.getElementById('withdrawPasswordInput').value = '';
+            document.getElementById('withdrawConfirm').checked = false;
+            document.getElementById('withdrawError').innerText = '';
+            updateWithdrawalButton();
+            document.getElementById('withdrawModal').style.display = 'flex';
+            document.getElementById('withdrawPasswordInput').focus();
+        }
+
+        function closeWithdrawalModal() {
+            document.getElementById('withdrawModal').style.display = 'none';
+            document.getElementById('withdrawPasswordInput').value = '';
+        }
+
+        function updateWithdrawalButton() {
+            document.getElementById('confirmWithdrawButton').disabled = !document.getElementById('withdrawConfirm').checked;
+        }
+
+        function handleWithdrawalKeyPress(e) {
+            if (e.key === 'Enter' && document.getElementById('withdrawConfirm').checked) withdrawAccount();
+        }
+
+        async function withdrawAccount() {
+            const password = document.getElementById('withdrawPasswordInput').value;
+            const button = document.getElementById('confirmWithdrawButton');
+            const error = document.getElementById('withdrawError');
+            error.innerText = '';
+            button.disabled = true;
+            try {
+                const response = await fetch('/api/users/me', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                if (!response.ok) {
+                    error.innerText = response.status === 401
+                        ? '비밀번호가 올바르지 않습니다.'
+                        : '회원 탈퇴를 처리할 수 없습니다.';
+                    return;
+                }
+                closeWithdrawalModal();
+                disconnectRealtime();
+                document.getElementById('usernameInput').value = '';
+                resetToLogin();
+            } catch (e) {
+                error.innerText = '회원 탈퇴 서버에 연결할 수 없습니다.';
+            } finally {
+                button.disabled = !document.getElementById('withdrawConfirm').checked;
+            }
         }
 
         function handleLoginKeyPress(e) {
@@ -395,7 +489,11 @@
                 div.innerText = m.content;
             } else {
                 div.className = 'msg msg-other';
-                div.innerHTML = `<div class="msg-sender">${m.senderName || '알 수 없음'}</div>${m.content}`;
+                const sender = document.createElement('div');
+                sender.className = 'msg-sender';
+                sender.innerText = m.senderName || '알 수 없음';
+                div.appendChild(sender);
+                div.appendChild(document.createTextNode(m.content));
             }
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
