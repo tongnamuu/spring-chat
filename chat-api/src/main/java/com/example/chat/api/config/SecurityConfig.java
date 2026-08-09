@@ -74,7 +74,7 @@ public class SecurityConfig {
                         (request, response, exception) -> AuthenticationFailureResponse.write(response)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/", "/index.html", "/favicon.ico", "/error", "/webjars/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/users").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
                         .anyRequest().authenticated())
                 .build();
     }

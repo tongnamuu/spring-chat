@@ -4,12 +4,12 @@ const path = require('path');
 test('CHAT-2 password-confirmed account withdrawal returns to login and blocks reuse', async ({ page, request }) => {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const username = `chat2_${suffix}`;
-  const password = 'chat2-e2e-password';
+  const password = 'chat2-e2e-password1';
   const nickname = 'CHAT-2 검증 사용자';
-  const createUser = await request.post('/api/users', {
+  const createUser = await request.post('/api/auth/signup', {
     data: { username, nickname, password }
   });
-  expect(createUser.status()).toBe(200);
+  expect(createUser.status()).toBe(201);
 
   await page.goto('/');
   await page.locator('#usernameInput').fill(username);

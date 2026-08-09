@@ -1,15 +1,15 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 
-const USERNAME = 'chat1_e2e';
-const PASSWORD = 'chat1-e2e-password';
+const USERNAME = `chat1_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+const PASSWORD = 'chat1-e2e-password1';
 const NICKNAME = 'E2E 검증 사용자';
 
 test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', async ({ page, request, context }) => {
-  const createUser = await request.post('/api/users', {
+  const createUser = await request.post('/api/auth/signup', {
     data: { username: USERNAME, nickname: NICKNAME, password: PASSWORD }
   });
-  expect([200, 400]).toContain(createUser.status());
+  expect(createUser.status()).toBe(201);
 
   await page.goto('/');
   await expect(page.locator('#loginModal')).toBeVisible();
@@ -62,8 +62,12 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
     }));
   });
 
-  await expect.poll(() => page.evaluate(() => window.__chat1Messages.length)).toBeGreaterThan(0);
-  const received = await page.evaluate(() => window.__chat1Messages.at(-1));
+  await expect.poll(() => page.evaluate(() =>
+    window.__chat1Messages.some(message => message.content === 'server-authenticated-message')
+  )).toBe(true);
+  const received = await page.evaluate(() =>
+    window.__chat1Messages.find(message => message.content === 'server-authenticated-message')
+  );
   expect(received.senderId).toBe(authenticatedUser.body.userId);
   expect(received.senderName).toBe(NICKNAME);
   expect(received.content).toBe('server-authenticated-message');
