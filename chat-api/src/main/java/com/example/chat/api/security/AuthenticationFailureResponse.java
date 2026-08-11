@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 public final class AuthenticationFailureResponse {
 
     public static final String CODE = "AUTHENTICATION_FAILED";
-    public static final String MESSAGE = "Invalid username or password";
+    public static final String MESSAGE = "Invalid email or password";
 
     private AuthenticationFailureResponse() {
     }

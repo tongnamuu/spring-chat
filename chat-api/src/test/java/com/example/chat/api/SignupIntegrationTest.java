@@ -70,51 +70,53 @@ class SignupIntegrationTest {
 
     @Test
     void validSignupCreatesOneUserWithHashedPasswordAndSafeResponse(CapturedOutput output) throws Exception {
+        String email = "New_User@Example.COM";
         String rawPassword = "SignupPassword123";
 
-        String response = mockMvc.perform(signup("new_user@example.com", rawPassword, "새 사용자"))
+        String response = mockMvc.perform(signup(email, rawPassword, "새 사용자"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").isNumber())
-                .andExpect(jsonPath("$.username").value("new_user@example.com"))
                 .andExpect(jsonPath("$.nickname").value("새 사용자"))
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.username").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(userRepository.count()).isEqualTo(1);
-        UserEntity saved = userRepository.findByUsername("new_user@example.com").orElseThrow();
+        UserEntity saved = userRepository.findByEmail("new_user@example.com").orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo(rawPassword);
         assertThat(passwordEncoder.matches(rawPassword, saved.getPasswordHash())).isTrue();
-        assertThat(response).doesNotContain(rawPassword, saved.getPasswordHash());
-        assertThat(output.getAll()).doesNotContain(rawPassword, saved.getPasswordHash());
+        assertThat(response).doesNotContain(email, "new_user@example.com", rawPassword, saved.getPasswordHash());
+        assertThat(output.getAll()).doesNotContain(email, "new_user@example.com", rawPassword, saved.getPasswordHash());
     }
 
     @Test
-    void duplicateUsernameReturnsConflictWithoutCreatingAnotherUser() throws Exception {
-        mockMvc.perform(signup("duplicate_user", "SignupPassword123", "첫 사용자"))
+    void duplicateEmailReturnsConflictWithoutCreatingAnotherUser() throws Exception {
+        mockMvc.perform(signup("Duplicate_User@Example.COM", "SignupPassword123", "첫 사용자"))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(signup("duplicate_user", "AnotherPassword456", "두 번째 사용자"))
+        mockMvc.perform(signup("duplicate_user@example.com", "AnotherPassword456", "두 번째 사용자"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("U003"))
-                .andExpect(jsonPath("$.message").value("Username already exists"))
+                .andExpect(jsonPath("$.message").value("Email already exists"))
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
 
         assertThat(userRepository.count()).isEqualTo(1);
-        assertThat(userRepository.findByUsername("duplicate_user")).get()
+        assertThat(userRepository.findByEmail("duplicate_user@example.com")).get()
                 .extracting(UserEntity::getNickname).isEqualTo("첫 사용자");
     }
 
     @ParameterizedTest(name = "rejects invalid {3}")
     @MethodSource("invalidSignupRequests")
     void invalidFieldsReturnFieldSpecificBadRequest(
-            String username,
+            String email,
             String password,
             String nickname,
             String invalidField
     ) throws Exception {
-        mockMvc.perform(signup(username, password, nickname))
+        mockMvc.perform(signup(email, password, nickname))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("V001"))
                 .andExpect(jsonPath("$.errors." + invalidField).isNotEmpty())
@@ -126,30 +128,29 @@ class SignupIntegrationTest {
 
     static Stream<Arguments> invalidSignupRequests() {
         return Stream.of(
-                Arguments.of("", "SignupPassword123", "사용자", "username"),
-                Arguments.of("a".repeat(31), "SignupPassword123", "사용자", "username"),
-                Arguments.of("a".repeat(51), "SignupPassword123", "사용자", "username"),
-                Arguments.of("1invalid", "SignupPassword123", "사용자", "username"),
-                Arguments.of("invalid@", "SignupPassword123", "사용자", "username"),
-                Arguments.of("valid_user", "", "사용자", "password"),
-                Arguments.of("valid_user", "short1", "사용자", "password"),
-                Arguments.of("valid_user", "A1" + "x".repeat(71), "사용자", "password"),
-                Arguments.of("valid_user", "onlyletters", "사용자", "password"),
-                Arguments.of("valid_user", "SignupPassword123", "", "nickname"),
-                Arguments.of("valid_user", "SignupPassword123", "A", "nickname"),
-                Arguments.of("valid_user", "SignupPassword123", "닉".repeat(21), "nickname"),
-                Arguments.of("valid_user", "SignupPassword123", " 앞뒤공백", "nickname")
+                Arguments.of("", "SignupPassword123", "사용자", "email"),
+                Arguments.of("not-an-email", "SignupPassword123", "사용자", "email"),
+                Arguments.of("invalid@", "SignupPassword123", "사용자", "email"),
+                Arguments.of("a".repeat(245) + "@example.com", "SignupPassword123", "사용자", "email"),
+                Arguments.of("valid@example.com", "", "사용자", "password"),
+                Arguments.of("valid@example.com", "short1", "사용자", "password"),
+                Arguments.of("valid@example.com", "A1" + "x".repeat(71), "사용자", "password"),
+                Arguments.of("valid@example.com", "onlyletters", "사용자", "password"),
+                Arguments.of("valid@example.com", "SignupPassword123", "", "nickname"),
+                Arguments.of("valid@example.com", "SignupPassword123", "A", "nickname"),
+                Arguments.of("valid@example.com", "SignupPassword123", "닉".repeat(21), "nickname"),
+                Arguments.of("valid@example.com", "SignupPassword123", " 앞뒤공백", "nickname")
         );
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signup(
-            String username,
+            String email,
             String password,
             String nickname
     ) {
         String body = """
-                {"username":"%s","password":"%s","nickname":"%s"}
-                """.formatted(username, password, nickname);
+                {"email":"%s","password":"%s","nickname":"%s"}
+                """.formatted(email, password, nickname);
         return post("/api/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body);

@@ -60,7 +60,7 @@ public class UserController {
         if (currentSession != null) {
             currentSession.invalidate();
         }
-        userSessionService.invalidateAll(principal.username());
+        userSessionService.invalidateAll(principal.getName());
         SecurityContextHolder.clearContext();
         return ResponseEntity.noContent().build();
     }
@@ -69,13 +69,11 @@ public class UserController {
         if (user.isWithdrawn()) {
             return UserDto.builder()
                     .userId(user.getUserId())
-                    .username(UserEntity.WITHDRAWN_USERNAME)
                     .nickname(UserEntity.WITHDRAWN_NICKNAME)
                     .build();
         }
         return UserDto.builder()
                 .userId(user.getUserId())
-                .username(user.getUsername())
                 .nickname(user.getNickname())
                 .build();
     }

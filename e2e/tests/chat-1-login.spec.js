@@ -1,20 +1,20 @@
 const { test, expect } = require('@playwright/test');
 const path = require('path');
 
-const USERNAME = `chat1_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+const EMAIL = `chat1_${Date.now()}_${Math.floor(Math.random() * 10000)}@example.com`;
 const PASSWORD = 'chat1-e2e-password1';
 const NICKNAME = 'E2E 검증 사용자';
 
 test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', async ({ page, request, context }) => {
   const createUser = await request.post('/api/auth/signup', {
-    data: { username: USERNAME, nickname: NICKNAME, password: PASSWORD }
+    data: { email: EMAIL, nickname: NICKNAME, password: PASSWORD }
   });
   expect(createUser.status()).toBe(201);
 
   await page.goto('/');
   await expect(page.locator('#loginModal')).toBeVisible();
   expect(await page.evaluate(async () => (await fetch('/ws-stomp/info')).status)).toBe(401);
-  await page.locator('#usernameInput').fill(USERNAME);
+  await page.locator('#emailInput').fill(EMAIL);
   await page.locator('#passwordInput').fill(PASSWORD);
   await page.locator('#loginButton').click();
 
@@ -27,12 +27,14 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
     return { status: response.status, body: await response.json() };
   });
   expect(authenticatedUser.status).toBe(200);
-  expect(authenticatedUser.body.username).toBe(USERNAME);
+  expect(authenticatedUser.body.email).toBeUndefined();
+  expect(authenticatedUser.body.nickname).toBe(NICKNAME);
 
   const sessionCookie = (await context.cookies()).find(cookie => cookie.name === 'CHAT_SESSION');
   expect(sessionCookie).toBeTruthy();
   expect(sessionCookie.httpOnly).toBe(true);
   expect(sessionCookie.sameSite).toBe('Lax');
+  expect(sessionCookie.value).not.toContain(EMAIL);
 
   const e2eRoom = page.locator('.room-item').filter({ hasText: 'CHAT-1 E2E Room' }).first();
   if (await e2eRoom.count()) {
@@ -89,7 +91,7 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
   expect(await page.evaluate(async () => (await fetch('/ws-stomp/info')).status)).toBe(401);
   expect(await page.evaluate(() => stompClient === null)).toBe(true);
 
-  await page.locator('#usernameInput').fill(USERNAME);
+  await page.locator('#emailInput').fill(EMAIL);
   await page.locator('#passwordInput').fill(PASSWORD);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeHidden();

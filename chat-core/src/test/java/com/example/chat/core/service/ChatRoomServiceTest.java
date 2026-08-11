@@ -54,12 +54,12 @@ class ChatRoomServiceTest {
     @BeforeEach
     void setUp() {
         user1 = userRepository.save(UserEntity.builder()
-                .username("user1")
+                .email("user1@example.com")
                 .nickname("User One")
                 .passwordHash("user1-password-hash")
                 .build());
         user2 = userRepository.save(UserEntity.builder()
-                .username("user2")
+                .email("user2@example.com")
                 .nickname("User Two")
                 .passwordHash("user2-password-hash")
                 .build());
@@ -129,7 +129,7 @@ class ChatRoomServiceTest {
         chatRoomService.joinRoomByInviteCode(user2.getUserId(), createdRoom.getInviteCode());
 
         UserEntity user3 = userRepository.save(UserEntity.builder()
-                .username("user3")
+                .email("user3@example.com")
                 .nickname("User Three")
                 .passwordHash("user3-password-hash")
                 .build());

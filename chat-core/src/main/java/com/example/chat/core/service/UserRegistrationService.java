@@ -8,6 +8,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 public class UserRegistrationService {
 
     private final UserRepository userRepository;
@@ -19,13 +21,14 @@ public class UserRegistrationService {
     }
 
     @Transactional
-    public UserEntity register(String username, String password, String nickname) {
-        if (userRepository.existsByUsername(username)) {
-            throw new ChatException(ErrorCode.USERNAME_ALREADY_EXISTS);
+    public UserEntity register(String email, String password, String nickname) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new ChatException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
 
         UserEntity user = UserEntity.builder()
-                .username(username)
+                .email(normalizedEmail)
                 .nickname(nickname)
                 .passwordHash(passwordEncoder.encode(password))
                 .build();
@@ -33,7 +36,7 @@ public class UserRegistrationService {
             return userRepository.saveAndFlush(user);
         } catch (DataIntegrityViolationException exception) {
             // Normalize a concurrent unique-key race to the same domain response.
-            throw new ChatException(ErrorCode.USERNAME_ALREADY_EXISTS);
+            throw new ChatException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
     }
 }

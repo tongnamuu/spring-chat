@@ -19,11 +19,11 @@ public class ApiUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        UserEntity user = userRepository.findByUsernameAndStatus(username, UserStatus.ACTIVE)
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        UserEntity user = userRepository.findByEmailAndStatus(email, UserStatus.ACTIVE)
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
 
-        return User.withUsername(user.getUsername())
+        return User.withUsername(user.getEmail())
                 .password(user.getPasswordHash())
                 .roles("USER")
                 .build();

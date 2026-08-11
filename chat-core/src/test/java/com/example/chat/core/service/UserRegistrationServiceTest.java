@@ -36,13 +36,13 @@ class UserRegistrationServiceTest {
         when(passwordEncoder.encode("Secure123")).thenReturn("encoded-password");
         when(userRepository.saveAndFlush(any(UserEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UserEntity registered = service.register("alice", "Secure123", "앨리스");
+        UserEntity registered = service.register("Alice@Example.COM", "Secure123", "앨리스");
 
         ArgumentCaptor<UserEntity> savedUser = ArgumentCaptor.forClass(UserEntity.class);
         verify(userRepository).saveAndFlush(savedUser.capture());
         verify(passwordEncoder).encode("Secure123");
         assertThat(registered).isSameAs(savedUser.getValue());
-        assertThat(savedUser.getValue().getUsername()).isEqualTo("alice");
+        assertThat(savedUser.getValue().getEmail()).isEqualTo("alice@example.com");
         assertThat(savedUser.getValue().getNickname()).isEqualTo("앨리스");
         assertThat(savedUser.getValue().getPasswordHash()).isEqualTo("encoded-password");
         assertThat(savedUser.getValue().getPasswordHash()).isNotEqualTo("Secure123");
@@ -50,11 +50,11 @@ class UserRegistrationServiceTest {
 
     @Test
     void rejectsKnownDuplicateBeforeEncodingPassword() {
-        when(userRepository.existsByUsername("alice")).thenReturn(true);
+        when(userRepository.existsByEmail("alice@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.register("alice", "Secure123", "앨리스"))
+        assertThatThrownBy(() -> service.register("Alice@Example.COM", "Secure123", "앨리스"))
                 .isInstanceOfSatisfying(ChatException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.USERNAME_ALREADY_EXISTS));
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS));
 
         verify(passwordEncoder, never()).encode(any());
         verify(userRepository, never()).saveAndFlush(any());
@@ -64,10 +64,10 @@ class UserRegistrationServiceTest {
     void mapsConcurrentUniqueConstraintViolationToDuplicateDomainError() {
         when(passwordEncoder.encode("Secure123")).thenReturn("encoded-password");
         when(userRepository.saveAndFlush(any(UserEntity.class)))
-                .thenThrow(new DataIntegrityViolationException("users_username_key"));
+                .thenThrow(new DataIntegrityViolationException("users_email_key"));
 
-        assertThatThrownBy(() -> service.register("alice", "Secure123", "앨리스"))
+        assertThatThrownBy(() -> service.register("Alice@Example.COM", "Secure123", "앨리스"))
                 .isInstanceOfSatisfying(ChatException.class, exception ->
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.USERNAME_ALREADY_EXISTS));
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EMAIL_ALREADY_EXISTS));
     }
 }

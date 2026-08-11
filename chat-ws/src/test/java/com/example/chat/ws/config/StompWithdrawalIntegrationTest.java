@@ -60,11 +60,11 @@ class StompWithdrawalIntegrationTest {
     void setUp() {
         userRepository.deleteAll();
         user = userRepository.save(UserEntity.builder()
-                .username("alice")
+                .email("alice@example.com")
                 .nickname("Alice")
                 .passwordHash("password-hash")
                 .build());
-        ChatPrincipal principal = new ChatPrincipal(user.getUserId(), user.getUsername(), user.getNickname());
+        ChatPrincipal principal = new ChatPrincipal(user.getUserId());
         authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, java.util.List.of());
     }
 
