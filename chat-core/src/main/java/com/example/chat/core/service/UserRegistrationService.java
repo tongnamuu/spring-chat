@@ -21,7 +21,7 @@ public class UserRegistrationService {
     }
 
     @Transactional
-    public UserEntity register(String email, String password, String nickname) {
+    public UserRegistrationResult register(String email, String password, String nickname) {
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new ChatException(ErrorCode.EMAIL_ALREADY_EXISTS);
@@ -33,7 +33,8 @@ public class UserRegistrationService {
                 .passwordHash(passwordEncoder.encode(password))
                 .build();
         try {
-            return userRepository.saveAndFlush(user);
+            UserEntity savedUser = userRepository.saveAndFlush(user);
+            return new UserRegistrationResult(savedUser.getUserId(), savedUser.getNickname());
         } catch (DataIntegrityViolationException exception) {
             // Normalize a concurrent unique-key race to the same domain response.
             throw new ChatException(ErrorCode.EMAIL_ALREADY_EXISTS);

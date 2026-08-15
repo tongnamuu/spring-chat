@@ -7,6 +7,7 @@ import com.example.chat.common.dto.UserDto;
 import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
 import com.example.chat.core.security.ChatPrincipal;
+import com.example.chat.core.service.UserRegistrationResult;
 import com.example.chat.core.service.UserRegistrationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -56,11 +57,11 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest signupRequest) {
-        UserEntity user = userRegistrationService.register(
+        UserRegistrationResult result = userRegistrationService.register(
                 signupRequest.email(),
                 signupRequest.password(),
                 signupRequest.nickname());
-        return ResponseEntity.status(HttpStatus.CREATED).body(SignupResponse.from(user));
+        return ResponseEntity.status(HttpStatus.CREATED).body(SignupResponse.from(result));
     }
 
     @PostMapping("/login")

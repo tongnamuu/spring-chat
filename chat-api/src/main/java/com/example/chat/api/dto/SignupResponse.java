@@ -1,10 +1,10 @@
 package com.example.chat.api.dto;
 
-import com.example.chat.core.entity.UserEntity;
+import com.example.chat.core.service.UserRegistrationResult;
 
 public record SignupResponse(Long userId, String nickname) {
 
-    public static SignupResponse from(UserEntity user) {
-        return new SignupResponse(user.getUserId(), user.getNickname());
+    public static SignupResponse from(UserRegistrationResult result) {
+        return new SignupResponse(result.userId(), result.nickname());
     }
 }

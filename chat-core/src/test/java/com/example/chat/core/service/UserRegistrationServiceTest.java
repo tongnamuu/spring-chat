@@ -32,16 +32,21 @@ class UserRegistrationServiceTest {
     }
 
     @Test
-    void hashesPasswordBeforeSavingUser() {
+    void hashesPasswordBeforeSavingUserAndReturnsSafeResult() {
         when(passwordEncoder.encode("Secure123")).thenReturn("encoded-password");
-        when(userRepository.saveAndFlush(any(UserEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.saveAndFlush(any(UserEntity.class))).thenAnswer(invocation -> {
+            UserEntity user = invocation.getArgument(0);
+            user.setUserId(7L);
+            return user;
+        });
 
-        UserEntity registered = service.register("Alice@Example.COM", "Secure123", "앨리스");
+        UserRegistrationResult registered = service.register("Alice@Example.COM", "Secure123", "앨리스");
 
         ArgumentCaptor<UserEntity> savedUser = ArgumentCaptor.forClass(UserEntity.class);
         verify(userRepository).saveAndFlush(savedUser.capture());
         verify(passwordEncoder).encode("Secure123");
-        assertThat(registered).isSameAs(savedUser.getValue());
+        assertThat(registered.userId()).isEqualTo(7L);
+        assertThat(registered.nickname()).isEqualTo("앨리스");
         assertThat(savedUser.getValue().getEmail()).isEqualTo("alice@example.com");
         assertThat(savedUser.getValue().getNickname()).isEqualTo("앨리스");
         assertThat(savedUser.getValue().getPasswordHash()).isEqualTo("encoded-password");
