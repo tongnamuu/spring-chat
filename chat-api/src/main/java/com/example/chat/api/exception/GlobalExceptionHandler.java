@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
         Map<String, Object> body = new HashMap<>();
         body.put("code", ErrorCode.INTERNAL_SERVER_ERROR.getCode());
-        body.put("message", ex.getMessage());
+        body.put("message", ErrorCode.INTERNAL_SERVER_ERROR.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 
@@ -48,7 +48,7 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case USER_NOT_FOUND, ROOM_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case INVALID_PASSWORD -> HttpStatus.UNAUTHORIZED;
-            case USERNAME_ALREADY_EXISTS -> HttpStatus.CONFLICT;
+            case EMAIL_ALREADY_EXISTS -> HttpStatus.CONFLICT;
             case ROOM_FULL, ALREADY_JOINED, INVALID_INVITE_CODE, INVALID_ROOM_CAPACITY, DIRECT_ROOM_INVALID -> HttpStatus.BAD_REQUEST;
             case NOT_ROOM_MEMBER -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

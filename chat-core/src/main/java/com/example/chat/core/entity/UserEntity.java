@@ -18,7 +18,6 @@ import java.time.ZonedDateTime;
 @Table(name = "users")
 public class UserEntity {
 
-    public static final String WITHDRAWN_USERNAME = "withdrawn";
     public static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
 
     @Id
@@ -26,8 +25,8 @@ public class UserEntity {
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "username", nullable = false, unique = true, length = 50)
-    private String username;
+    @Column(name = "email", nullable = false, unique = true, length = 254)
+    private String email;
 
     @Column(name = "nickname", nullable = false, length = 50)
     private String nickname;
@@ -51,7 +50,7 @@ public class UserEntity {
 
     public UserEntity(
             Long userId,
-            String username,
+            String email,
             String nickname,
             String passwordHash,
             UserStatus status,
@@ -59,7 +58,7 @@ public class UserEntity {
             ZonedDateTime createdAt
     ) {
         this.userId = userId;
-        this.username = username;
+        this.email = requireEmail(email);
         this.nickname = nickname;
         this.passwordHash = requirePasswordHash(passwordHash);
         this.status = status != null ? status : UserStatus.ACTIVE;
@@ -74,8 +73,8 @@ public class UserEntity {
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = requireEmail(email); }
 
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
@@ -103,7 +102,7 @@ public class UserEntity {
         if (isWithdrawn()) {
             return;
         }
-        username = WITHDRAWN_USERNAME + "-" + userId;
+        email = "withdrawn-" + userId + "@deleted.invalid";
         nickname = WITHDRAWN_NICKNAME;
         passwordHash = requirePasswordHash(invalidatedPasswordHash);
         status = UserStatus.WITHDRAWN;
@@ -117,9 +116,16 @@ public class UserEntity {
         return passwordHash;
     }
 
+    private static String requireEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        return email;
+    }
+
     public static class Builder {
         private Long userId;
-        private String username;
+        private String email;
         private String nickname;
         private String passwordHash;
         private UserStatus status = UserStatus.ACTIVE;
@@ -127,7 +133,7 @@ public class UserEntity {
         private ZonedDateTime createdAt;
 
         public Builder userId(Long userId) { this.userId = userId; return this; }
-        public Builder username(String username) { this.username = username; return this; }
+        public Builder email(String email) { this.email = email; return this; }
         public Builder nickname(String nickname) { this.nickname = nickname; return this; }
         public Builder passwordHash(String passwordHash) { this.passwordHash = passwordHash; return this; }
         public Builder status(UserStatus status) { this.status = status; return this; }
@@ -135,7 +141,7 @@ public class UserEntity {
         public Builder createdAt(ZonedDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public UserEntity build() {
-            return new UserEntity(userId, username, nickname, passwordHash, status, deletedAt, createdAt);
+            return new UserEntity(userId, email, nickname, passwordHash, status, deletedAt, createdAt);
         }
     }
 }

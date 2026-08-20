@@ -3,16 +3,16 @@ const path = require('path');
 
 test('CHAT-2 password-confirmed account withdrawal returns to login and blocks reuse', async ({ page, request }) => {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-  const username = `chat2_${suffix}`;
+  const email = `chat2_${suffix}@example.com`;
   const password = 'chat2-e2e-password1';
   const nickname = 'CHAT-2 검증 사용자';
   const createUser = await request.post('/api/auth/signup', {
-    data: { username, nickname, password }
+    data: { email, nickname, password }
   });
   expect(createUser.status()).toBe(201);
 
   await page.goto('/');
-  await page.locator('#usernameInput').fill(username);
+  await page.locator('#emailInput').fill(email);
   await page.locator('#passwordInput').fill(password);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeHidden();
@@ -48,7 +48,7 @@ test('CHAT-2 password-confirmed account withdrawal returns to login and blocks r
   await expect(page.locator('#withdrawModal')).toBeHidden();
   await expect(page.locator('#loginModal')).toBeVisible();
   await expect(page.locator('#userBadge')).toHaveText('로그인 필요');
-  await expect(page.locator('#usernameInput')).toHaveValue('');
+  await expect(page.locator('#emailInput')).toHaveValue('');
   expect(await page.evaluate(async () => (await fetch('/api/auth/me')).status)).toBe(401);
   expect(await page.evaluate(() => stompClient === null)).toBe(true);
 
@@ -57,9 +57,9 @@ test('CHAT-2 password-confirmed account withdrawal returns to login and blocks r
     fullPage: true
   });
 
-  await page.locator('#usernameInput').fill(username);
+  await page.locator('#emailInput').fill(email);
   await page.locator('#passwordInput').fill(password);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeVisible();
-  await expect(page.locator('#loginError')).toHaveText('아이디 또는 비밀번호가 올바르지 않습니다.');
+  await expect(page.locator('#loginError')).toHaveText('이메일 또는 비밀번호가 올바르지 않습니다.');
 });

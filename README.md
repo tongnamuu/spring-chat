@@ -81,7 +81,7 @@ npm test
 
 | Method | Endpoint | 설명 |
 | :--- | :--- | :--- |
-| `POST` | `/api/auth/signup` | 회원가입 (username, nickname, password, 성공 시 201) |
+| `POST` | `/api/auth/signup` | 회원가입 (email, nickname, password, 성공 시 201) |
 | `POST` | `/api/auth/login` | 로그인 및 Redis 세션 쿠키 발급 |
 | `GET` | `/api/auth/me` | 현재 로그인 사용자 조회 |
 | `POST` | `/api/auth/logout` | 서버 세션 무효화 |
@@ -95,14 +95,14 @@ npm test
 
 ---
 
-REST와 STOMP 모두 `CHAT_SESSION` HttpOnly 쿠키에서 사용자를 결정합니다. 클라이언트가 보낸
+REST와 STOMP 모두 `CHAT_SESSION` HttpOnly 쿠키에서 사용자를 결정합니다. 세션 principal에는
+변경되지 않는 내부 `userId`만 저장하며, 이메일은 쿠키·세션 principal·일반 사용자 응답에 포함하지 않습니다. 클라이언트가 보낸
 `X-User-Id`, `senderId`, `senderName`은 사용자 식별에 사용하지 않습니다. HTTPS 배포에서는
 `SESSION_COOKIE_SECURE=true`를 설정해야 합니다.
 
 회원 생성은 `POST /api/auth/signup`만 사용합니다. 이전 `POST /api/users` 생성 경로는 제거했으며,
-username은 영문자로 시작하는 3~30자의 영문·숫자·밑줄 아이디 또는 50자 이내의 이메일을 허용합니다.
-password는 8~72자이면서 영문과 숫자를 각각 하나 이상 포함하고, nickname은 앞뒤 공백 없는
-2~20자로 제한합니다.
+email은 254자 이내의 유효한 이메일만 허용하고 소문자로 정규화해 로그인 식별자로 저장합니다.
+password는 8~72자이면서 영문과 숫자를 각각 하나 이상 포함하고, nickname은 앞뒤 공백 없는 2~20자로 제한합니다.
 
 회원 탈퇴는 사용자를 소프트 삭제하고 식별 정보를 익명화합니다. 참여 멤버십과 방 인원을 한
 트랜잭션에서 정리하고, OWNER는 가장 먼저 가입한 남은 멤버에게 이전합니다. 남은 멤버가 없는

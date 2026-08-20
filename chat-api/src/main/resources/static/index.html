@@ -148,8 +148,8 @@
             <section class="auth-panel" id="loginPanel" role="tabpanel" aria-labelledby="loginTab">
                 <h3>Spring Chat 로그인</h3>
                 <div class="form-group">
-                    <label for="usernameInput">아이디</label>
-                    <input type="text" id="usernameInput" autocomplete="username">
+                    <label for="emailInput">이메일</label>
+                    <input type="email" id="emailInput" autocomplete="email">
                 </div>
                 <div class="form-group">
                     <label for="passwordInput">비밀번호</label>
@@ -162,10 +162,10 @@
             <section class="auth-panel" id="signupPanel" role="tabpanel" aria-labelledby="signupTab" hidden>
                 <h3>계정 만들기</h3>
                 <div class="form-group">
-                    <label for="signupUsernameInput">아이디</label>
-                    <input type="text" id="signupUsernameInput" autocomplete="username" aria-describedby="signupUsernameHint signupUsernameError">
-                    <p class="field-hint" id="signupUsernameHint">3~30자 아이디 또는 50자 이내 이메일</p>
-                    <div class="field-error" id="signupUsernameError"></div>
+                    <label for="signupEmailInput">이메일</label>
+                    <input type="email" id="signupEmailInput" autocomplete="email" aria-describedby="signupEmailHint signupEmailError">
+                    <p class="field-hint" id="signupEmailHint">로그인과 계정 확인에 사용할 이메일</p>
+                    <div class="field-error" id="signupEmailError"></div>
                 </div>
                 <div class="form-group">
                     <label for="signupNicknameInput">닉네임</label>
@@ -263,7 +263,7 @@
         let pendingRoomMessages = [];
 
         const signupFieldErrors = {
-            username: 'signupUsernameError',
+            email: 'signupEmailError',
             nickname: 'signupNicknameError',
             password: 'signupPasswordError'
         };
@@ -280,8 +280,8 @@
             clearSignupErrors();
             if (!preserveSuccess) setAuthSuccess('');
             (loginSelected
-                ? document.getElementById('usernameInput')
-                : document.getElementById('signupUsernameInput')).focus();
+                ? document.getElementById('emailInput')
+                : document.getElementById('signupEmailInput')).focus();
         }
 
         function setAuthSuccess(message) {
@@ -296,8 +296,16 @@
             document.getElementById('signupError').innerText = '';
         }
 
+        function resetSignupForm() {
+            document.getElementById('signupEmailInput').value = '';
+            document.getElementById('signupNicknameInput').value = '';
+            document.getElementById('signupPasswordInput').value = '';
+            document.getElementById('signupPasswordConfirmInput').value = '';
+            clearSignupErrors();
+        }
+
         async function signup() {
-            const username = document.getElementById('signupUsernameInput').value;
+            const email = document.getElementById('signupEmailInput').value;
             const nickname = document.getElementById('signupNicknameInput').value;
             const password = document.getElementById('signupPasswordInput').value;
             const passwordConfirm = document.getElementById('signupPasswordConfirmInput').value;
@@ -315,7 +323,7 @@
                 const response = await fetch('/api/auth/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, nickname, password })
+                    body: JSON.stringify({ email, nickname, password })
                 });
                 const body = await response.json();
                 if (!response.ok) {
@@ -325,17 +333,16 @@
                             if (target) document.getElementById(target).innerText = translateSignupError(field, message);
                         });
                     } else if (response.status === 409) {
-                        document.getElementById('signupUsernameError').innerText = '이미 사용 중인 아이디입니다.';
+                        document.getElementById('signupEmailError').innerText = '이미 가입된 이메일입니다.';
                     } else {
                         document.getElementById('signupError').innerText = '회원가입을 처리할 수 없습니다.';
                     }
                     return;
                 }
 
-                document.getElementById('usernameInput').value = body.username;
+                document.getElementById('emailInput').value = email.trim().toLowerCase();
                 document.getElementById('passwordInput').value = '';
-                document.getElementById('signupPasswordInput').value = '';
-                document.getElementById('signupPasswordConfirmInput').value = '';
+                resetSignupForm();
                 setAuthSuccess('회원가입이 완료되었습니다. 비밀번호를 입력해 로그인하세요.');
                 showAuthView('login', true);
                 document.getElementById('passwordInput').focus();
@@ -348,7 +355,7 @@
 
         function translateSignupError(field, message) {
             const messages = {
-                username: '3~30자의 영문·숫자·밑줄 아이디 또는 올바른 이메일을 입력해 주세요.',
+                email: '올바른 이메일 주소를 입력해 주세요.',
                 nickname: '닉네임은 앞뒤 공백 없이 2~20자로 입력해 주세요.',
                 password: '비밀번호는 8~72자이며 영문과 숫자를 각각 포함해야 합니다.'
             };
@@ -360,7 +367,7 @@
         }
 
         async function login() {
-            const username = document.getElementById('usernameInput').value.trim();
+            const email = document.getElementById('emailInput').value.trim();
             const password = document.getElementById('passwordInput').value;
             const loginButton = document.getElementById('loginButton');
             const loginError = document.getElementById('loginError');
@@ -371,12 +378,12 @@
                 const res = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ email, password })
                 });
                 if (res.ok) {
                     currentUser = await res.json();
                 } else {
-                    loginError.innerText = '아이디 또는 비밀번호가 올바르지 않습니다.';
+                    loginError.innerText = '이메일 또는 비밀번호가 올바르지 않습니다.';
                     return;
                 }
                 showAuthenticatedUser();
@@ -407,6 +414,7 @@
             document.getElementById('withdrawButton').style.display = 'inline-block';
             document.getElementById('logoutButton').style.display = 'inline-block';
             document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('emailInput').value = '';
             document.getElementById('passwordInput').value = '';
         }
 
@@ -443,7 +451,7 @@
             document.getElementById('sendBtn').disabled = true;
             document.getElementById('loginModal').style.display = 'flex';
             showAuthView('login');
-            document.getElementById('usernameInput').focus();
+            document.getElementById('emailInput').focus();
         }
 
         function openWithdrawalModal() {
@@ -488,7 +496,7 @@
                 }
                 closeWithdrawalModal();
                 disconnectRealtime();
-                document.getElementById('usernameInput').value = '';
+                document.getElementById('emailInput').value = '';
                 resetToLogin();
             } catch (e) {
                 error.innerText = '회원 탈퇴 서버에 연결할 수 없습니다.';

@@ -23,6 +23,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Set;
 
@@ -82,41 +83,54 @@ class AuthIntegrationTest {
     void setUp() {
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushDb();
         userRepository.deleteAll();
-        alice = saveUser("alice", "Alice", "alice-password");
-        bob = saveUser("bob", "Bob", "bob-password");
+        alice = saveUser("alice@example.com", "Alice", "alice-password");
+        bob = saveUser("bob@example.com", "Bob", "bob-password");
     }
 
     @Test
     void loginCreatesRedisSessionAndMeReturnsAuthenticatedUser() throws Exception {
-        MvcResult login = login("alice", "alice-password")
+        MvcResult login = login("alice@example.com", "alice-password")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(alice.getUserId()))
-                .andExpect(jsonPath("$.username").value("alice"))
                 .andExpect(jsonPath("$.nickname").value("Alice"))
+                .andExpect(jsonPath("$.email").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andReturn();
 
         Cookie sessionCookie = requireSessionCookie(login);
         String setCookie = Objects.requireNonNull(login.getResponse().getHeader("Set-Cookie"));
-        assertThat(setCookie).contains("HttpOnly", "SameSite=Lax").doesNotContain("alice-password");
-        assertThat(login.getResponse().getContentAsString()).doesNotContain(sessionCookie.getValue());
+        assertThat(setCookie).contains("HttpOnly", "SameSite=Lax")
+                .doesNotContain("alice@example.com", "alice-password");
+        assertThat(login.getResponse().getContentAsString())
+                .doesNotContain("alice@example.com", "alice-password", sessionCookie.getValue());
         assertThat(redisSessionKeys()).hasSize(1);
+        assertThat(redisTemplate.keys("*")).allMatch(key -> !key.contains("alice@example.com"));
+        redisSessionKeys().forEach(key -> assertThat(new String(
+                Objects.requireNonNull(redisTemplate.dump(key)), StandardCharsets.ISO_8859_1))
+                .doesNotContain("alice@example.com", "Alice"));
 
         mockMvc.perform(get("/api/auth/me").cookie(sessionCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(alice.getUserId()))
-                .andExpect(jsonPath("$.username").value("alice"));
+                .andExpect(jsonPath("$.nickname").value("Alice"))
+                .andExpect(jsonPath("$.email").doesNotExist());
+
+        alice.setNickname("Renamed Alice");
+        userRepository.saveAndFlush(alice);
+        mockMvc.perform(get("/api/auth/me").cookie(sessionCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nickname").value("Renamed Alice"));
     }
 
     @Test
-    void invalidUsernameAndPasswordReturnTheSameUnauthorizedResponseWithoutSession() throws Exception {
-        String wrongPassword = login("alice", "wrong-password")
+    void invalidEmailAndPasswordReturnTheSameUnauthorizedResponseWithoutSession() throws Exception {
+        String wrongPassword = login("alice@example.com", "wrong-password")
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"))
                 .andReturn().getResponse().getContentAsString();
 
-        String unknownUser = login("missing", "wrong-password")
+        String unknownUser = login("missing@example.com", "wrong-password")
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"))
@@ -128,7 +142,7 @@ class AuthIntegrationTest {
 
     @Test
     void protectedRestApiUsesPrincipalAndIgnoresForgedUserHeader() throws Exception {
-        Cookie aliceSession = requireSessionCookie(login("alice", "alice-password").andReturn());
+        Cookie aliceSession = requireSessionCookie(login("alice@example.com", "alice-password").andReturn());
 
         mockMvc.perform(post("/api/rooms")
                         .cookie(aliceSession)
@@ -150,7 +164,7 @@ class AuthIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTHENTICATION_FAILED"));
 
-        Cookie session = requireSessionCookie(login("alice", "alice-password").andReturn());
+        Cookie session = requireSessionCookie(login("alice@example.com", "alice-password").andReturn());
         assertThat(redisSessionKeys()).hasSize(1);
 
         mockMvc.perform(post("/api/auth/logout").cookie(session))
@@ -162,10 +176,10 @@ class AuthIntegrationTest {
         assertThat(redisSessionKeys()).isEmpty();
     }
 
-    private org.springframework.test.web.servlet.ResultActions login(String username, String password) throws Exception {
+    private org.springframework.test.web.servlet.ResultActions login(String email, String password) throws Exception {
         return mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}"));
+                .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"));
     }
 
     private Cookie requireSessionCookie(MvcResult result) {
@@ -180,9 +194,9 @@ class AuthIntegrationTest {
                 .collect(java.util.stream.Collectors.toSet());
     }
 
-    private UserEntity saveUser(String username, String nickname, String password) {
+    private UserEntity saveUser(String email, String nickname, String password) {
         return userRepository.save(UserEntity.builder()
-                .username(username)
+                .email(email)
                 .nickname(nickname)
                 .passwordHash(passwordEncoder.encode(password))
                 .build());

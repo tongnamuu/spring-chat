@@ -31,7 +31,7 @@ class StompAuthenticationChannelInterceptorTest {
 
     @Test
     void acceptsAuthenticatedConnectSendAndSubscribe() {
-        ChatPrincipal principal = new ChatPrincipal(1L, "alice", "Alice");
+        ChatPrincipal principal = new ChatPrincipal(1L);
         when(userRepository.existsByUserIdAndStatus(1L, UserStatus.ACTIVE)).thenReturn(true);
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, java.util.List.of());
@@ -44,7 +44,7 @@ class StompAuthenticationChannelInterceptorTest {
 
     @Test
     void rejectsSendFromWithdrawnUserEvenWhenSessionPrincipalIsStillPresent() {
-        ChatPrincipal principal = new ChatPrincipal(1L, "alice", "Alice");
+        ChatPrincipal principal = new ChatPrincipal(1L);
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, java.util.List.of());
 

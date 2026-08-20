@@ -12,14 +12,14 @@ class UserEntityTest {
     @Test
     void requiresPasswordHash() {
         assertThatThrownBy(() -> UserEntity.builder()
-                .username("alice")
+                .email("alice@example.com")
                 .nickname("Alice")
                 .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Password hash is required");
 
         assertThatThrownBy(() -> UserEntity.builder()
-                .username("alice")
+                .email("alice@example.com")
                 .nickname("Alice")
                 .passwordHash(" ")
                 .build())
@@ -28,10 +28,20 @@ class UserEntityTest {
     }
 
     @Test
+    void requiresEmail() {
+        assertThatThrownBy(() -> UserEntity.builder()
+                .nickname("Alice")
+                .passwordHash("password-hash")
+                .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Email is required");
+    }
+
+    @Test
     void withdrawalAnonymizesIdentityAndIsIdempotent() {
         UserEntity user = UserEntity.builder()
                 .userId(42L)
-                .username("alice")
+                .email("alice@example.com")
                 .nickname("Alice")
                 .passwordHash("original-hash")
                 .build();
@@ -41,7 +51,7 @@ class UserEntityTest {
         user.withdraw("second-hash", withdrawnAt.plusHours(1));
 
         assertThat(user.isWithdrawn()).isTrue();
-        assertThat(user.getUsername()).isEqualTo("withdrawn-42");
+        assertThat(user.getEmail()).isEqualTo("withdrawn-42@deleted.invalid");
         assertThat(user.getNickname()).isEqualTo(UserEntity.WITHDRAWN_NICKNAME);
         assertThat(user.getPasswordHash()).isEqualTo("invalidated-hash");
         assertThat(user.getDeletedAt()).isEqualTo(withdrawnAt);

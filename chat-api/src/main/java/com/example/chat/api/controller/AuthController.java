@@ -7,12 +7,15 @@ import com.example.chat.common.dto.UserDto;
 import com.example.chat.core.entity.UserEntity;
 import com.example.chat.core.repository.UserRepository;
 import com.example.chat.core.security.ChatPrincipal;
+import com.example.chat.core.service.UserRegistrationResult;
 import com.example.chat.core.service.UserRegistrationService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Locale;
 import java.util.Map;
 
 @RestController
@@ -53,11 +57,11 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest signupRequest) {
-        UserEntity user = userRegistrationService.register(
-                signupRequest.username(),
+        UserRegistrationResult result = userRegistrationService.register(
+                signupRequest.email(),
                 signupRequest.password(),
                 signupRequest.nickname());
-        return ResponseEntity.status(HttpStatus.CREATED).body(SignupResponse.from(user));
+        return ResponseEntity.status(HttpStatus.CREATED).body(SignupResponse.from(result));
     }
 
     @PostMapping("/login")
@@ -69,9 +73,9 @@ public class AuthController {
         try {
             Authentication verified = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(
-                            loginRequest.username(), loginRequest.password()));
-            UserEntity user = userRepository.findByUsername(verified.getName()).orElseThrow();
-            ChatPrincipal principal = new ChatPrincipal(user.getUserId(), user.getUsername(), user.getNickname());
+                            loginRequest.email().trim().toLowerCase(Locale.ROOT), loginRequest.password()));
+            UserEntity user = userRepository.findByEmail(verified.getName()).orElseThrow();
+            ChatPrincipal principal = new ChatPrincipal(user.getUserId());
             Authentication authenticated = UsernamePasswordAuthenticationToken.authenticated(
                     principal, null, verified.getAuthorities());
 
@@ -116,15 +120,18 @@ public class AuthController {
     }
 
     private UserDto toDto(ChatPrincipal principal) {
+        UserEntity user = userRepository.findById(principal.userId()).orElseThrow();
         return UserDto.builder()
-                .userId(principal.userId())
-                .username(principal.username())
-                .nickname(principal.nickname())
+                .userId(user.getUserId())
+                .nickname(user.getNickname())
                 .build();
     }
 
     public record LoginRequest(
-            @NotBlank(message = "Username is required") String username,
+            @NotBlank(message = "Email is required")
+            @Size(max = 254, message = "Email must not exceed 254 characters")
+            @Email(message = "Email must be a valid email address")
+            String email,
             @NotBlank(message = "Password is required") String password
     ) {
     }

@@ -107,9 +107,9 @@ class AccountWithdrawalIntegrationTest {
         chatRoomMemberRepository.deleteAll();
         chatRoomRepository.deleteAll();
         userRepository.deleteAll();
-        alice = saveUser("alice", "Alice", "alice-password");
-        bob = saveUser("bob", "Bob", "bob-password");
-        charlie = saveUser("charlie", "Charlie", "charlie-password");
+        alice = saveUser("alice@example.com", "Alice", "alice-password");
+        bob = saveUser("bob@example.com", "Bob", "bob-password");
+        charlie = saveUser("charlie@example.com", "Charlie", "charlie-password");
     }
 
     @Test
@@ -145,8 +145,8 @@ class AccountWithdrawalIntegrationTest {
                 .content("retained history")
                 .build());
 
-        Cookie firstSession = login("alice", "alice-password");
-        Cookie secondSession = login("alice", "alice-password");
+        Cookie firstSession = login("alice@example.com", "alice-password");
+        Cookie secondSession = login("alice@example.com", "alice-password");
         assertThat(redisSessionKeys()).hasSize(2);
 
         mockMvc.perform(delete("/api/users/me")
@@ -158,7 +158,7 @@ class AccountWithdrawalIntegrationTest {
         UserEntity withdrawn = userRepository.findById(alice.getUserId()).orElseThrow();
         assertThat(withdrawn.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
         assertThat(withdrawn.getDeletedAt()).isNotNull();
-        assertThat(withdrawn.getUsername()).isEqualTo("withdrawn-" + alice.getUserId());
+        assertThat(withdrawn.getEmail()).isEqualTo("withdrawn-" + alice.getUserId() + "@deleted.invalid");
         assertThat(withdrawn.getNickname()).isEqualTo(UserEntity.WITHDRAWN_NICKNAME);
         assertThat(passwordEncoder.matches("alice-password", withdrawn.getPasswordHash())).isFalse();
 
@@ -183,12 +183,12 @@ class AccountWithdrawalIntegrationTest {
         assertThat(redisSessionKeys()).isEmpty();
         assertThat(chatRoomRepository.findById(sharedRoom.getRoomId())).get()
                 .extracting(ChatRoomEntity::getCurrentCount).isEqualTo(2);
-        loginRequest("alice", "alice-password").andExpect(status().isUnauthorized());
+        loginRequest("alice@example.com", "alice-password").andExpect(status().isUnauthorized());
 
-        Cookie bobSession = login("bob", "bob-password");
+        Cookie bobSession = login("bob@example.com", "bob-password");
         mockMvc.perform(get("/api/users/{userId}", alice.getUserId()).cookie(bobSession))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value(UserEntity.WITHDRAWN_USERNAME))
+                .andExpect(jsonPath("$.email").doesNotExist())
                 .andExpect(jsonPath("$.nickname").value(UserEntity.WITHDRAWN_NICKNAME));
         mockMvc.perform(get("/api/rooms/{roomId}/messages", sharedRoom.getRoomId()).cookie(bobSession))
                 .andExpect(status().isOk())
@@ -203,7 +203,7 @@ class AccountWithdrawalIntegrationTest {
         ChatRoomEntity room = saveRoom("protected", alice.getUserId(), 2);
         saveMember(room, alice, Role.OWNER);
         saveMember(room, bob, Role.MEMBER);
-        Cookie session = login("alice", "alice-password");
+        Cookie session = login("alice@example.com", "alice-password");
 
         mockMvc.perform(delete("/api/users/me")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -218,7 +218,7 @@ class AccountWithdrawalIntegrationTest {
 
         UserEntity unchanged = userRepository.findById(alice.getUserId()).orElseThrow();
         assertThat(unchanged.getStatus()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(unchanged.getUsername()).isEqualTo("alice");
+        assertThat(unchanged.getEmail()).isEqualTo("alice@example.com");
         assertThat(unchanged.getDeletedAt()).isNull();
         assertThat(chatRoomMemberRepository.existsByRoomIdAndUserId(room.getRoomId(), alice.getUserId())).isTrue();
         assertThat(chatRoomRepository.findById(room.getRoomId())).get()
@@ -258,15 +258,15 @@ class AccountWithdrawalIntegrationTest {
                 .get().extracting(ChatRoomMemberEntity::getRole).isEqualTo(Role.OWNER);
     }
 
-    private Cookie login(String username, String password) throws Exception {
-        MvcResult result = loginRequest(username, password).andExpect(status().isOk()).andReturn();
+    private Cookie login(String email, String password) throws Exception {
+        MvcResult result = loginRequest(email, password).andExpect(status().isOk()).andReturn();
         return Objects.requireNonNull(result.getResponse().getCookie("CHAT_SESSION"));
     }
 
-    private org.springframework.test.web.servlet.ResultActions loginRequest(String username, String password) throws Exception {
+    private org.springframework.test.web.servlet.ResultActions loginRequest(String email, String password) throws Exception {
         return mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}"));
+                .content("{\"email\":\"" + email + "\",\"password\":\"" + password + "\"}"));
     }
 
     private Set<String> redisSessionKeys() {
@@ -277,9 +277,9 @@ class AccountWithdrawalIntegrationTest {
                 .collect(java.util.stream.Collectors.toSet());
     }
 
-    private UserEntity saveUser(String username, String nickname, String password) {
+    private UserEntity saveUser(String email, String nickname, String password) {
         return userRepository.save(UserEntity.builder()
-                .username(username)
+                .email(email)
                 .nickname(nickname)
                 .passwordHash(passwordEncoder.encode(password))
                 .build());

@@ -2,6 +2,8 @@ package com.example.chat.ws.controller;
 
 import com.example.chat.common.dto.ChatMessageDto;
 import com.example.chat.common.enums.MessageType;
+import com.example.chat.core.entity.UserEntity;
+import com.example.chat.core.repository.UserRepository;
 import com.example.chat.core.security.ChatPrincipal;
 import com.example.chat.ws.producer.KafkaMessageProducer;
 import org.slf4j.Logger;
@@ -21,17 +23,26 @@ public class StompChatController {
 
     private final KafkaMessageProducer kafkaMessageProducer;
     private final SimpMessageSendingOperations messagingTemplate;
+    private final UserRepository userRepository;
 
-    public StompChatController(KafkaMessageProducer kafkaMessageProducer, SimpMessageSendingOperations messagingTemplate) {
+    public StompChatController(
+            KafkaMessageProducer kafkaMessageProducer,
+            SimpMessageSendingOperations messagingTemplate,
+            UserRepository userRepository
+    ) {
         this.kafkaMessageProducer = kafkaMessageProducer;
         this.messagingTemplate = messagingTemplate;
+        this.userRepository = userRepository;
     }
 
     @MessageMapping("/chat/message")
     public void message(ChatMessageDto message, Principal principal) {
         ChatPrincipal chatPrincipal = authenticatedPrincipal(principal);
+        UserEntity sender = userRepository.findById(chatPrincipal.userId())
+                .filter(user -> !user.isWithdrawn())
+                .orElseThrow(() -> new IllegalStateException("Active chat user is missing"));
         message.setSenderId(chatPrincipal.userId());
-        message.setSenderName(chatPrincipal.nickname());
+        message.setSenderName(sender.getNickname());
 
         if (message.getCreatedAt() == null) {
             message.setCreatedAt(ZonedDateTime.now());
