@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class KafkaMessageProducer {
@@ -18,10 +19,13 @@ public class KafkaMessageProducer {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    public void sendMessage(ChatMessageDto messageDto) {
-        log.info("Producing message to Kafka topic {}: roomId={}, senderId={}", 
+    public CompletableFuture<Void> sendMessage(ChatMessageDto messageDto) {
+        log.debug("Producing message to Kafka topic {}: roomId={}, senderId={}",
                 CHAT_MESSAGES_TOPIC, messageDto.getRoomId(), messageDto.getSenderId());
         
-        kafkaTemplate.send(CHAT_MESSAGES_TOPIC, String.valueOf(messageDto.getRoomId()), messageDto);
+        return kafkaTemplate.send(CHAT_MESSAGES_TOPIC, String.valueOf(messageDto.getRoomId()), messageDto)
+                .whenComplete((result, error) -> {
+                    if (error != null) log.error("Kafka publish failed: eventId={}", messageDto.getEventId(), error);
+                }).thenApply(result -> null);
     }
 }

@@ -1,0 +1,56 @@
+{
+  "target": {
+    "clients": 1500,
+    "messagesPerSecond": 10000,
+    "maximumDeliveryLatencyMs": 1000,
+    "achieved": false,
+    "fullTargetTestExecuted": false
+  },
+  "environment": "Local Docker Desktop, shared 7.748 GiB VM, three WebSocket nodes, single Kafka broker and PostgreSQL",
+  "functionalVerification": {
+    "gradle": "All modules passed; subsequent consumer and WS changes also passed focused regression tests",
+    "playwright": "6 passed: login, withdrawal, signup, multi-node fanout with 1200-message recovery, 25000-message UI bounds, missing-batch recovery"
+  },
+  "measurements": [
+    {
+      "runId": "1789643020462",
+      "clients": 5,
+      "targetRate": 1000,
+      "seconds": 3,
+      "offeredRate": 994.519136087694,
+      "received": 15000,
+      "expectedDeliveries": 15000,
+      "missingAtDeadline": 0,
+      "duplicates": 0,
+      "outOfOrder": 0,
+      "p99Ms": 46,
+      "maxLatencyMs": 55,
+      "maxLocalArrivalSkewMs": 32,
+      "passed": true,
+      "note": "Before final pipelined publication and local heap cap changes"
+    },
+    {
+      "runId": "1789643570295",
+      "clients": 50,
+      "targetRate": 10000,
+      "seconds": 5,
+      "messageFillerBytes": 256,
+      "javaHeapLimitMiB": 256,
+      "offeredRate": 9954.53572804099,
+      "received": 2500000,
+      "expectedDeliveries": 2500000,
+      "missingAtDeadline": 0,
+      "duplicates": 0,
+      "outOfOrder": 0,
+      "disconnects": 0,
+      "p50Ms": 9476,
+      "p99Ms": 17506,
+      "maxLatencyMs": 17623,
+      "maxIngressLatencyMs": 17380,
+      "maxAfterIngressLatencyMs": 2828,
+      "maxLocalArrivalSkewMs": 229,
+      "passed": false,
+      "note": "All messages arrived during the 30-second drain; one-second delivery target failed. Generator and clients shared one Node process. Stage maxima are not additive."
+    }
+  ]
+}

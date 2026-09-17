@@ -104,7 +104,7 @@
         </div>
 
         <div class="action-buttons">
-            <button class="btn btn-primary" onclick="openCreateModal()">+ 방 개설 (Max 50)</button>
+            <button class="btn btn-primary" onclick="openCreateModal()">+ 방 개설 (Max 1,500)</button>
             <button class="btn btn-secondary" onclick="openJoinModal()"># 코드로 참여</button>
         </div>
 
@@ -207,8 +207,8 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>최대 정원 (최대 50명)</label>
-                <input type="number" id="newMaxCapacity" value="50" min="2" max="50">
+                <label>최대 정원 (최대 1,500명)</label>
+                <input type="number" id="newMaxCapacity" value="50" min="2" max="1500">
             </div>
             <div style="display:flex; gap:10px;">
                 <button class="btn btn-secondary" onclick="closeCreateModal()">취소</button>
@@ -262,6 +262,13 @@
         let historyLoading = false;
         let pendingRoomMessages = [];
         const roomMessageState = new Map();
+        let pendingRoomMessageCount = 0;
+        let pendingRoomOverflow = false;
+        let roomSelectionVersion = 0;
+        let pendingRenderMessages = [];
+        let renderFrame = null;
+        const MAX_VISIBLE_MESSAGES = 500;
+        const MAX_PENDING_MESSAGES = 20000;
 
         const signupFieldErrors = {
             username: 'signupUsernameError',
@@ -431,6 +438,11 @@
         }
 
         function resetToLogin() {
+            roomSelectionVersion++;
+            roomMessageState.clear();
+            pendingRoomMessages = [];
+            pendingRoomMessageCount = 0;
+            pendingRenderMessages = [];
             currentUser = null;
             activeRoom = null;
             document.getElementById('userBadge').innerText = '로그인 필요';
@@ -505,16 +517,29 @@
         function initWebSocket() {
             if (!currentUser) return;
             shouldReconnect = true;
-            const socket = new SockJS('/ws-stomp');
+            const localDevelopment = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+            const pinnedEndpoints = new Map([
+                ['ccccc', '/ws-stomp-a'],
+                ['bbbbb', '/ws-stomp-b']
+            ]);
+            const endpoint = (localDevelopment && pinnedEndpoints.get(currentUser?.username)) || '/ws-stomp';
+            const socket = new SockJS(endpoint);
             stompClient = Stomp.over(socket);
+            stompClient.debug = null;
             
             stompClient.connect({}, function (frame) {
                 console.log('Connected STOMP WebSocket: ' + frame);
                 const indicator = document.getElementById('statusIndicator');
                 indicator.classList.add('connected');
                 document.getElementById('statusText').innerText = 'WS Zero-Downtime Connected';
+                stompClient.subscribe('/user/queue/publish-results', frame => {
+                    if (!JSON.parse(frame.body).accepted) {
+                        document.getElementById('statusText').innerText = '메시지 전송 실패';
+                    }
+                });
 
                 if (activeRoom) {
+                    historyLoading = true;
                     subscribeToRoom(activeRoom.roomId, false);
                     scheduleMissedMessageSync(activeRoom.roomId);
                 }
@@ -562,9 +587,15 @@
         }
 
         async function selectRoom(room, isFirstJoin = false) {
+            roomSelectionVersion++;
             activeRoom = room;
             historyLoading = true;
             pendingRoomMessages = [];
+            pendingRoomMessageCount = 0;
+            pendingRoomOverflow = false;
+            pendingRenderMessages = [];
+            document.getElementById('messagesContainer').replaceChildren();
+            roomMessageState.clear();
             resetRoomMessageState(room.roomId);
             document.getElementById('currentRoomTitle').innerText = room.title;
             document.getElementById('currentRoomMeta').innerText = `초대코드: ${room.inviteCode} | 인원: ${room.currentCount}/${room.maxCapacity}명`;
@@ -573,16 +604,7 @@
 
             subscribeToRoom(room.roomId, isFirstJoin);
 
-            // Load History
-            const res = await fetch(`/api/rooms/${room.roomId}/messages`);
-            if (res.ok) {
-                const msgs = await res.json();
-                renderMessages(msgs.reverse());
-            }
-            historyLoading = false;
-            pendingRoomMessages.forEach(message => appendMessage(message));
-            pendingRoomMessages = [];
-            scheduleMissedMessageSync(room.roomId);
+            await syncMissedMessages(room.roomId, true);
         }
 
         function subscribeToRoom(roomId, isFirstJoin = false) {
@@ -595,12 +617,18 @@
             }
 
             currentSubscription = stompClient.subscribe(`/sub/chat/room/${roomId}`, function (msg) {
-                const messageDto = JSON.parse(msg.body);
-                if (historyLoading && activeRoom && activeRoom.roomId === roomId) {
-                    pendingRoomMessages.push(messageDto);
-                } else {
-                    appendMessage(messageDto);
+                if (!activeRoom || activeRoom.roomId !== roomId) return;
+                const payload = JSON.parse(msg.body);
+                const batch = payload.messages ? payload : { roomId, previousMessageId: 0, messages: [payload] };
+                const deliveryNode = msg.headers?.['x-chat-ws-node'];
+                batch.messages.forEach(message => { message.deliveryNode = deliveryNode; });
+                const state = getRoomMessageState(roomId);
+                if (historyLoading || batch.previousMessageId > state.lastReceivedMessageId) {
+                    bufferRoomBatch(batch);
+                    if (!historyLoading) scheduleMissedMessageSync(roomId);
+                    return;
                 }
+                batch.messages.forEach(message => appendMessage(message));
             });
 
             // Only send ENTER event if it's the brand new first join
@@ -613,6 +641,7 @@
         }
 
         function renderMessages(msgs) {
+            pendingRenderMessages = [];
             const container = document.getElementById('messagesContainer');
             container.innerHTML = '';
             if (msgs.length === 0) {
@@ -625,7 +654,8 @@
         function resetRoomMessageState(roomId) {
             roomMessageState.set(roomId, {
                 seenKeys: new Set(),
-                lastReceivedMessageId: 0
+                lastReceivedMessageId: 0,
+                syncing: false
             });
         }
 
@@ -655,14 +685,16 @@
 
         function rememberMessage(m) {
             const state = getRoomMessageState(m.roomId);
+            if (m.messageId && m.messageId <= state.lastReceivedMessageId) return false;
             const key = messageKey(m);
-            const signature = messageSignature(m);
-            if (state.seenKeys.has(key) || state.seenKeys.has(signature)) {
+            if (state.seenKeys.has(key)) {
                 updateLastReceivedMessageId(state, m);
                 return false;
             }
             state.seenKeys.add(key);
-            state.seenKeys.add(signature);
+            if (state.seenKeys.size > MAX_PENDING_MESSAGES) {
+                state.seenKeys.delete(state.seenKeys.values().next().value);
+            }
             updateLastReceivedMessageId(state, m);
             return true;
         }
@@ -673,32 +705,104 @@
             }
         }
 
-        async function syncMissedMessages(roomId) {
+        function bufferRoomBatch(batch) {
+            if (pendingRoomMessageCount + batch.messages.length > MAX_PENDING_MESSAGES) {
+                pendingRoomMessages = [];
+                pendingRoomMessageCount = 0;
+                pendingRoomOverflow = true;
+            }
+            pendingRoomMessages.push(batch);
+            pendingRoomMessageCount += batch.messages.length;
+        }
+
+        async function syncMissedMessages(roomId, initial = false) {
             if (!currentUser || !activeRoom || activeRoom.roomId !== roomId) return;
             const state = getRoomMessageState(roomId);
+            if (state.syncing) return;
+            state.syncing = true;
+            historyLoading = true;
+            const version = roomSelectionVersion;
+            const isCurrent = () => version === roomSelectionVersion && currentUser && activeRoom?.roomId === roomId;
             try {
-                const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}`);
-                if (!res.ok) return;
-                const missed = await res.json();
-                missed.forEach(message => appendMessage(message));
+                do {
+                    pendingRoomOverflow = false;
+                    const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`);
+                    if (!headResponse.ok) throw new Error('History unavailable');
+                    const head = await headResponse.json();
+                    if (!isCurrent()) return;
+                    const through = head[0]?.messageId || 0;
+                    if (initial) {
+                        renderMessages(head.reverse());
+                        initial = false;
+                    }
+                    // Freeze the upper bound; new live messages remain buffered.
+                    while (state.lastReceivedMessageId < through) {
+                        const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`);
+                        if (!res.ok) throw new Error('Sync unavailable');
+                        const missed = await res.json();
+                        if (!isCurrent()) return;
+                        if (!missed.length) throw new Error('Sync made no progress');
+                        missed.forEach(message => appendMessage(message));
+                    }
+                    if (pendingRoomOverflow) continue;
+                    const buffered = pendingRoomMessages;
+                    pendingRoomMessages = [];
+                    pendingRoomMessageCount = 0;
+                    for (let i = 0; i < buffered.length; i++) {
+                        const batch = buffered[i];
+                        if (batch.previousMessageId > state.lastReceivedMessageId) {
+                            buffered.slice(i).forEach(bufferRoomBatch);
+                            pendingRoomOverflow = true;
+                            break;
+                        }
+                        batch.messages.forEach(message => appendMessage(message));
+                    }
+                } while (isCurrent() && pendingRoomOverflow);
+                if (isCurrent()) historyLoading = false;
             } catch (e) {
                 console.log('Message sync failed', e);
+                if (isCurrent()) setTimeout(() => {
+                    if (isCurrent()) syncMissedMessages(roomId, initial);
+                }, 1000);
+            } finally {
+                state.syncing = false;
             }
         }
 
         function scheduleMissedMessageSync(roomId) {
             syncMissedMessages(roomId);
-            setTimeout(() => syncMissedMessages(roomId), 1000);
         }
 
         function appendMessage(m) {
+            if (!currentUser || !activeRoom || m.roomId !== activeRoom.roomId) return;
             if (!rememberMessage(m)) return;
+            pendingRenderMessages.push(m);
+            if (pendingRenderMessages.length > MAX_VISIBLE_MESSAGES) pendingRenderMessages.shift();
+            if (renderFrame === null) renderFrame = requestAnimationFrame(flushMessages);
+        }
+
+        function flushMessages() {
+            renderFrame = null;
             const container = document.getElementById('messagesContainer');
+            if (!currentUser || !activeRoom) {
+                pendingRenderMessages = [];
+                return;
+            }
+            const stickToBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+            const fragment = document.createDocumentFragment();
+            pendingRenderMessages.forEach(m => fragment.appendChild(createMessageElement(m)));
+            pendingRenderMessages = [];
             // Remove empty prompt if present
             if (container.children.length === 1 && container.children[0].classList.contains('msg-system') && container.children[0].innerText.includes('아직 대화 내역이 없습니다')) {
                 container.innerHTML = '';
             }
 
+            container.appendChild(fragment);
+            while (container.children.length > MAX_VISIBLE_MESSAGES) container.firstElementChild.remove();
+            if (stickToBottom) container.scrollTop = container.scrollHeight;
+        }
+
+        function createMessageElement(m) {
             const div = document.createElement('div');
             
             if (m.messageType === 'SYSTEM' || m.messageType === 'ENTER' || m.messageType === 'LEAVE') {
@@ -715,8 +819,14 @@
                 div.appendChild(sender);
                 div.appendChild(document.createTextNode(m.content));
             }
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
+            if (m.deliveryNode || m.sourceNode) {
+                const node = document.createElement('div');
+                node.className = 'msg-sender';
+                node.textContent = [m.sourceNode && `발신 WS: ${m.sourceNode}`,
+                    m.deliveryNode && `수신 WS: ${m.deliveryNode}`].filter(Boolean).join(' | ');
+                div.appendChild(node);
+            }
+            return div;
         }
 
         function sendMessage() {

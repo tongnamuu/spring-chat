@@ -84,6 +84,16 @@ class ChatRoomServiceTest {
     }
 
     @Test
+    void allows1500MembersButRejectsLargerCapacity() {
+        CreateRoomRequest request = CreateRoomRequest.builder().title("Large room")
+                .roomType(RoomType.GROUP_PUBLIC).maxCapacity(1500).build();
+        assertThat(chatRoomService.createRoom(user1.getUserId(), request).getMaxCapacity()).isEqualTo(1500);
+        request.setMaxCapacity(1501);
+        assertThatThrownBy(() -> chatRoomService.createRoom(user1.getUserId(), request))
+                .isInstanceOf(ChatException.class);
+    }
+
+    @Test
     @DisplayName("실제 PostgreSQL Testcontainers - 1대1 채팅방 개설 시 최대 인원 2명 자동 지정")
     void createDirectRoom_Success() {
         CreateRoomRequest request = CreateRoomRequest.builder()

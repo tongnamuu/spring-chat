@@ -45,6 +45,7 @@ async function recordedEventIds(page, recorderName) {
 }
 
 test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed reconnect messages', async ({ browser, request }) => {
+  test.setTimeout(120_000);
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const aliceUsername = `chat8_alice_${suffix}`;
   const bobUsername = `chat8_bob_${suffix}`;
@@ -125,6 +126,25 @@ test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed 
     await expect.poll(() => recordedContents(bob, '__chat8Messages'), { timeout: 15_000 }).toContain('missed-while-bob-disconnected');
     const bobContents = await recordedContents(bob, '__chat8Messages');
     expect(bobContents.filter(content => content === 'missed-while-bob-disconnected')).toHaveLength(1);
+
+    await bob.evaluate(() => disconnectRealtime());
+    await alice.evaluate(() => {
+      for (let i = 0; i < 1200; i++) {
+        stompClient.send('/pub/chat/message', {}, JSON.stringify({
+          roomId: activeRoom.roomId, messageType: 'TALK', content: `burst-${i}`
+        }));
+      }
+    });
+    await expect.poll(async () => (await recordedContents(alice, '__chat8Messages'))
+      .filter(content => content.startsWith('burst-')).length, { timeout: 60_000 }).toBe(1200);
+    await bob.evaluate(() => initWebSocket());
+    const expectedBurst = Array.from({ length: 1200 }, (_, i) => `burst-${i}`);
+    await expect.poll(async () => (await recordedContents(bob, '__chat8Messages'))
+      .filter(content => content.startsWith('burst-')), { timeout: 30_000 }).toEqual(expectedBurst);
+    expect((await recordedContents(alice, '__chat8Messages')).filter(content => content.startsWith('burst-')))
+      .toEqual(expectedBurst);
+    await expect(alice.locator('#messagesContainer > .msg')).toHaveCount(500);
+    await expect(bob.locator('#messagesContainer > .msg')).toHaveCount(500);
   } finally {
     await aliceContext.close();
     await bobContext.close();

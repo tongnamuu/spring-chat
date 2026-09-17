@@ -8,6 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import org.hibernate.annotations.CreationTimestamp;
@@ -17,6 +18,7 @@ import java.time.ZonedDateTime;
 @Entity
 @Table(
     name = "chat_message",
+    indexes = @Index(name = "idx_chat_message_room_id_message_id", columnList = "room_id,message_id"),
     uniqueConstraints = @UniqueConstraint(name = "uk_chat_message_event_id", columnNames = "event_id")
 )
 public class ChatMessageEntity {

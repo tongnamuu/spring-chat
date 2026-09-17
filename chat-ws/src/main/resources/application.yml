@@ -24,9 +24,18 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        batch.size: 65536
+        buffer.memory: 33554432
+        max.block.ms: 1000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
     consumer:
+      enable-auto-commit: false
+      max-poll-records: 100
       auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer

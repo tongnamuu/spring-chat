@@ -1,12 +1,17 @@
 package com.example.chat.ws.consumer;
 
-import com.example.chat.common.dto.ChatMessageDto;
-import com.example.chat.ws.producer.KafkaMessageProducer;
+import com.example.chat.common.dto.ChatMessageBatch;
+import com.example.chat.ws.config.FanoutBackpressure;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
+import org.springframework.messaging.support.MessageBuilder;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class KafkaMessageFanoutListener {
@@ -14,19 +19,36 @@ public class KafkaMessageFanoutListener {
     private static final Logger log = LoggerFactory.getLogger(KafkaMessageFanoutListener.class);
 
     private final SimpMessageSendingOperations messagingTemplate;
+    private final FanoutBackpressure backpressure;
+    private final ObjectMapper mapper;
 
-    public KafkaMessageFanoutListener(SimpMessageSendingOperations messagingTemplate) {
+    @Value("${chat.ws.debug-node:false}")
+    private boolean debugNode;
+
+    @Value("${chat.ws.node-id:chat-ws}")
+    private String nodeId;
+
+    public KafkaMessageFanoutListener(SimpMessageSendingOperations messagingTemplate,
+            FanoutBackpressure backpressure, ObjectMapper mapper) {
         this.messagingTemplate = messagingTemplate;
+        this.backpressure = backpressure;
+        this.mapper = mapper;
     }
 
     @KafkaListener(
-            topics = KafkaMessageProducer.CHAT_MESSAGES_TOPIC,
+            topics = ChatMessageBatch.TOPIC,
             groupId = "${chat.ws.fanout.group-id:${spring.application.name:chat-ws}-${random.uuid}}"
     )
-    public void fanout(ChatMessageDto message) {
-        log.info("Fanout Kafka message to STOMP subscribers: roomId={}, senderId={}, type={}",
-                message.getRoomId(), message.getSenderId(), message.getMessageType());
-
-        messagingTemplate.convertAndSend("/sub/chat/room/" + message.getRoomId(), message);
+    public void fanout(ChatMessageBatch batch) {
+        log.debug("Fanout persisted batch: roomId={}, size={}", batch.roomId(), batch.messages().size());
+        String destination = "/sub/chat/room/" + batch.roomId();
+        byte[] payload = mapper.writeValueAsBytes(batch);
+        backpressure.reserve(destination, payload.length);
+        SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        headers.setContentType(org.springframework.util.MimeTypeUtils.APPLICATION_JSON);
+        if (debugNode) headers.setNativeHeader("x-chat-ws-node", nodeId);
+        headers.setHeader(FanoutBackpressure.WEIGHT_HEADER, payload.length);
+        headers.setLeaveMutable(true);
+        messagingTemplate.send(destination, MessageBuilder.createMessage(payload, headers.getMessageHeaders()));
     }
 }

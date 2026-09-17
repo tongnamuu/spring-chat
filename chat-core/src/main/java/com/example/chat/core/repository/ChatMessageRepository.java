@@ -16,6 +16,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, 
 
     List<ChatMessageEntity> findByRoomIdOrderByMessageIdDesc(Long roomId, Pageable pageable);
 
-    @Query("SELECT m FROM ChatMessageEntity m WHERE m.roomId = :roomId AND m.messageId > :lastReceivedMessageId ORDER BY m.messageId ASC")
-    List<ChatMessageEntity> findMissedMessages(@Param("roomId") Long roomId, @Param("lastReceivedMessageId") Long lastReceivedMessageId);
+    @Query("SELECT m FROM ChatMessageEntity m WHERE m.roomId = :roomId AND m.messageId > :lastReceivedMessageId AND m.messageId <= :throughMessageId ORDER BY m.messageId ASC")
+    List<ChatMessageEntity> findMissedMessages(@Param("roomId") Long roomId,
+            @Param("lastReceivedMessageId") Long lastReceivedMessageId,
+            @Param("throughMessageId") Long throughMessageId, Pageable pageable);
 }
