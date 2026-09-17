@@ -41,13 +41,17 @@ for (const action of ['logout', 'withdraw']) {
       clients.push(client);
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Connect timeout')), 10000);
-        client.onConnect = () => {
+        client.onConnect = frame => {
+          assert.equal(frame.headers['heart-beat'], '10000,10000');
           client.subscribe(`/sub/chat/room/${roomId}`, frame => {
             const batch = JSON.parse(frame.body);
+            if (batch.subscriptionReady) {
+              clearTimeout(timer);
+              resolve();
+              return;
+            }
             state.messages.push(...batch.messages.map(m => m.content));
           });
-          clearTimeout(timer);
-          resolve();
         };
         client.onStompError = () => { clearTimeout(timer); reject(new Error('STOMP error')); };
         client.activate();

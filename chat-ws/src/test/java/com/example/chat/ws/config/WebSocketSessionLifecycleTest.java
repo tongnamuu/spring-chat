@@ -28,7 +28,7 @@ class WebSocketSessionLifecycleTest {
     void closesAllSocketsOfEndedSessionAndPreservesOtherSessions(boolean expired) throws Exception {
         var registry = new WebSocketRegistryListener();
         var backpressure = mock(FanoutBackpressure.class);
-        var config = new WebSocketConfig(mock(StompAuthenticationChannelInterceptor.class), backpressure);
+        var config = new WebSocketConfig(mock(StompAuthenticationChannelInterceptor.class), backpressure, mock(SubscriptionReadyInterceptor.class));
         ApplicationEventPublisher publisher = event -> registry.onApplicationEvent((ApplicationEvent) event);
         ReflectionTestUtils.setField(config, "eventPublisher", publisher);
         var registration = new InspectableTransport();

@@ -265,6 +265,12 @@
         let pendingRoomMessageCount = 0;
         let pendingRoomOverflow = false;
         let roomSelectionVersion = 0;
+        let roomSyncTimer = null;
+        let readyTimer = null;
+        let connectionVersion = 0;
+        let reconnectAttempt = 0;
+        let roomReady = false;
+        let liveSocket = null;
         let pendingRenderMessages = [];
         let renderFrame = null;
         const MAX_VISIBLE_MESSAGES = 500;
@@ -425,6 +431,12 @@
         }
 
         function disconnectRealtime() {
+            connectionVersion++;
+            clearTimeout(readyTimer);
+            roomReady = false;
+            roomSelectionVersion++;
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             shouldReconnect = false;
             if (reconnectTimer) clearTimeout(reconnectTimer);
             if (currentSubscription) {
@@ -435,9 +447,13 @@
                 stompClient.disconnect(() => {});
             }
             stompClient = null;
+            if (liveSocket) liveSocket.close();
+            liveSocket = null;
         }
 
         function resetToLogin() {
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             roomSelectionVersion++;
             roomMessageState.clear();
             pendingRoomMessages = [];
@@ -517,6 +533,10 @@
         function initWebSocket() {
             if (!currentUser) return;
             shouldReconnect = true;
+            clearTimeout(reconnectTimer);
+            if (navigator.onLine === false) { setRealtimeStatus('오프라인'); return; }
+            const version = ++connectionVersion;
+            setRealtimeStatus('WS 연결 중');
             const localDevelopment = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
             const pinnedEndpoints = new Map([
                 ['ccccc', '/ws-stomp-a'],
@@ -524,14 +544,16 @@
             ]);
             const endpoint = (localDevelopment && pinnedEndpoints.get(currentUser?.username)) || '/ws-stomp';
             const socket = new SockJS(endpoint);
+            liveSocket = socket;
             stompClient = Stomp.over(socket);
             stompClient.debug = null;
+            stompClient.heartbeat.outgoing = 10000;
+            stompClient.heartbeat.incoming = 10000;
             
             stompClient.connect({}, function (frame) {
+                if (version !== connectionVersion) return;
                 console.log('Connected STOMP WebSocket: ' + frame);
-                const indicator = document.getElementById('statusIndicator');
-                indicator.classList.add('connected');
-                document.getElementById('statusText').innerText = 'WS Zero-Downtime Connected';
+                setRealtimeStatus('WS 연결됨', !activeRoom);
                 stompClient.subscribe('/user/queue/publish-results', frame => {
                     if (!JSON.parse(frame.body).accepted) {
                         document.getElementById('statusText').innerText = '메시지 전송 실패';
@@ -541,17 +563,38 @@
                 if (activeRoom) {
                     historyLoading = true;
                     subscribeToRoom(activeRoom.roomId, false);
-                    scheduleMissedMessageSync(activeRoom.roomId);
                 }
             }, function (error) {
-                console.log('STOMP Connection error, auto-reconnecting...', error);
-                const indicator = document.getElementById('statusIndicator');
-                indicator.classList.remove('connected');
-                document.getElementById('statusText').innerText = 'WS Reconnecting...';
-                if (shouldReconnect && currentUser) {
-                    reconnectTimer = setTimeout(initWebSocket, 3000);
-                }
+                if (version === connectionVersion) reconnectRealtime();
             });
+        }
+
+        function setRealtimeStatus(text, ready = false) {
+            document.getElementById('statusIndicator').classList.toggle('connected', ready);
+            document.getElementById('statusText').innerText = text;
+            document.getElementById('messageInput').disabled = !ready || !activeRoom;
+            document.getElementById('sendBtn').disabled = !ready || !activeRoom;
+        }
+
+        function reconnectRealtime(immediate = false) {
+            if (!shouldReconnect || !currentUser) return;
+            connectionVersion++;
+            roomSelectionVersion++;
+            clearTimeout(readyTimer);
+            clearTimeout(roomSyncTimer);
+            clearTimeout(reconnectTimer);
+            roomReady = false;
+            historyLoading = true;
+            const socket = liveSocket;
+            liveSocket = null;
+            stompClient = null;
+            currentSubscription = null;
+            if (socket) socket.close();
+            setRealtimeStatus(navigator.onLine === false ? '오프라인' : 'WS 재연결 중');
+            if (navigator.onLine !== false) {
+                const delay = immediate ? Math.random() * 500 : Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt++, 5)) * (0.75 + Math.random() * 0.5);
+                reconnectTimer = setTimeout(initWebSocket, delay);
+            }
         }
 
         async function loadMyRooms() {
@@ -587,6 +630,8 @@
         }
 
         async function selectRoom(room, isFirstJoin = false) {
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             roomSelectionVersion++;
             activeRoom = room;
             historyLoading = true;
@@ -599,16 +644,22 @@
             resetRoomMessageState(room.roomId);
             document.getElementById('currentRoomTitle').innerText = room.title;
             document.getElementById('currentRoomMeta').innerText = `초대코드: ${room.inviteCode} | 인원: ${room.currentCount}/${room.maxCapacity}명`;
-            document.getElementById('messageInput').disabled = false;
-            document.getElementById('sendBtn').disabled = false;
+            setRealtimeStatus('구독 준비 중');
 
             subscribeToRoom(room.roomId, isFirstJoin);
 
-            await syncMissedMessages(room.roomId, true);
         }
 
         function subscribeToRoom(roomId, isFirstJoin = false) {
+            roomReady = false;
+            historyLoading = true;
+            clearTimeout(readyTimer);
             if (!stompClient || !stompClient.connected) return;
+            const version = roomSelectionVersion;
+            const connection = connectionVersion;
+            const isCurrent = () => version === roomSelectionVersion && connection === connectionVersion && activeRoom?.roomId === roomId;
+            setRealtimeStatus('구독 준비 중');
+            readyTimer = setTimeout(() => { if (isCurrent()) reconnectRealtime(); }, 10000);
 
             // Always unsubscribe from previous subscription to prevent duplicates
             if (currentSubscription) {
@@ -617,8 +668,16 @@
             }
 
             currentSubscription = stompClient.subscribe(`/sub/chat/room/${roomId}`, function (msg) {
-                if (!activeRoom || activeRoom.roomId !== roomId) return;
+                if (!isCurrent()) return;
                 const payload = JSON.parse(msg.body);
+                if (payload.subscriptionReady) {
+                    if (roomReady) return;
+                    clearTimeout(readyTimer);
+                    roomReady = true;
+                    syncMissedMessages(roomId, !getRoomMessageState(roomId).initialized);
+                    if (isFirstJoin) stompClient.send('/pub/chat/message', {}, JSON.stringify({roomId, messageType: 'ENTER'}));
+                    return;
+                }
                 const batch = payload.messages ? payload : { roomId, previousMessageId: 0, messages: [payload] };
                 const deliveryNode = msg.headers?.['x-chat-ws-node'];
                 batch.messages.forEach(message => { message.deliveryNode = deliveryNode; });
@@ -631,13 +690,6 @@
                 batch.messages.forEach(message => appendMessage(message));
             });
 
-            // Only send ENTER event if it's the brand new first join
-            if (isFirstJoin) {
-                stompClient.send('/pub/chat/message', {}, JSON.stringify({
-                    roomId: roomId,
-                    messageType: 'ENTER'
-                }));
-            }
         }
 
         function renderMessages(msgs) {
@@ -655,7 +707,8 @@
             roomMessageState.set(roomId, {
                 seenKeys: new Set(),
                 lastReceivedMessageId: 0,
-                syncing: false
+                syncing: null,
+                initialized: false
             });
         }
 
@@ -716,28 +769,32 @@
         }
 
         async function syncMissedMessages(roomId, initial = false) {
-            if (!currentUser || !activeRoom || activeRoom.roomId !== roomId) return;
+            if (!roomReady || !currentUser || !activeRoom || activeRoom.roomId !== roomId) return;
             const state = getRoomMessageState(roomId);
-            if (state.syncing) return;
-            state.syncing = true;
+            if (state.syncing === roomSelectionVersion) return;
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
+            state.syncing = roomSelectionVersion;
             historyLoading = true;
+            setRealtimeStatus('메시지 복구 중');
             const version = roomSelectionVersion;
             const isCurrent = () => version === roomSelectionVersion && currentUser && activeRoom?.roomId === roomId;
             try {
                 do {
                     pendingRoomOverflow = false;
-                    const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`);
+                    const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`, { signal: AbortSignal.timeout(10000) });
                     if (!headResponse.ok) throw new Error('History unavailable');
                     const head = await headResponse.json();
                     if (!isCurrent()) return;
                     const through = head[0]?.messageId || 0;
                     if (initial) {
                         renderMessages(head.reverse());
+                        state.initialized = true;
                         initial = false;
                     }
                     // Freeze the upper bound; new live messages remain buffered.
                     while (state.lastReceivedMessageId < through) {
-                        const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`);
+                        const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`, { signal: AbortSignal.timeout(10000) });
                         if (!res.ok) throw new Error('Sync unavailable');
                         const missed = await res.json();
                         if (!isCurrent()) return;
@@ -758,14 +815,21 @@
                         batch.messages.forEach(message => appendMessage(message));
                     }
                 } while (isCurrent() && pendingRoomOverflow);
-                if (isCurrent()) historyLoading = false;
+                if (isCurrent()) {
+                    historyLoading = false;
+                    reconnectAttempt = 0;
+                    setRealtimeStatus('WS 연결됨', true);
+                }
             } catch (e) {
                 console.log('Message sync failed', e);
-                if (isCurrent()) setTimeout(() => {
-                    if (isCurrent()) syncMissedMessages(roomId, initial);
-                }, 1000);
             } finally {
-                state.syncing = false;
+                if (state.syncing === version) state.syncing = null;
+                if (isCurrent() && historyLoading && stompClient?.connected) {
+                    roomSyncTimer = setTimeout(() => {
+                        roomSyncTimer = null;
+                        if (isCurrent() && stompClient?.connected) syncMissedMessages(roomId, initial);
+                    }, 1000 + Math.random() * 1000);
+                }
             }
         }
 
@@ -832,7 +896,7 @@
         function sendMessage() {
             const input = document.getElementById('messageInput');
             const content = input.value.trim();
-            if (!content || !activeRoom) return;
+            if (!content || !activeRoom || !roomReady || historyLoading || !stompClient?.connected) return;
 
             const dto = {
                 roomId: activeRoom.roomId,
@@ -893,6 +957,8 @@
         }
 
         window.addEventListener('DOMContentLoaded', restoreSession);
+        window.addEventListener('offline', () => reconnectRealtime());
+        window.addEventListener('online', () => reconnectRealtime(true));
     </script>
 </body>
 </html>
