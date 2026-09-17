@@ -31,6 +31,7 @@ public class ChatMessageConsumerService {
                 .senderId(messageDto.getSenderId())
                 .messageType(messageDto.getMessageType())
                 .content(messageDto.getContent())
+                .createdAt(messageDto.getCreatedAt())
                 .build();
 
         ChatMessageEntity saved = chatMessageRepository.save(entity);

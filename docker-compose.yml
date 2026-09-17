@@ -9,6 +9,8 @@ services:
     depends_on:
       - chat-api
       - chat-ws
+      - chat-ws-a
+      - chat-ws-b
 
   postgres:
     image: postgres:15-alpine
@@ -79,6 +81,46 @@ services:
       context: .
       dockerfile: Dockerfile.chat-ws
     container_name: spring-chat-ws
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
+      SPRING_DATASOURCE_USERNAME: chatuser
+      SPRING_DATASOURCE_PASSWORD: chatpassword
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  chat-ws-a:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat-ws
+    container_name: spring-chat-ws-a
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
+      SPRING_DATASOURCE_USERNAME: chatuser
+      SPRING_DATASOURCE_PASSWORD: chatpassword
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  chat-ws-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.chat-ws
+    container_name: spring-chat-ws-b
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
       SPRING_DATASOURCE_USERNAME: chatuser

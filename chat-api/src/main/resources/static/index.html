@@ -261,6 +261,7 @@
         let shouldReconnect = false;
         let historyLoading = false;
         let pendingRoomMessages = [];
+        const roomMessageState = new Map();
 
         const signupFieldErrors = {
             username: 'signupUsernameError',
@@ -515,6 +516,7 @@
 
                 if (activeRoom) {
                     subscribeToRoom(activeRoom.roomId, false);
+                    scheduleMissedMessageSync(activeRoom.roomId);
                 }
             }, function (error) {
                 console.log('STOMP Connection error, auto-reconnecting...', error);
@@ -563,6 +565,7 @@
             activeRoom = room;
             historyLoading = true;
             pendingRoomMessages = [];
+            resetRoomMessageState(room.roomId);
             document.getElementById('currentRoomTitle').innerText = room.title;
             document.getElementById('currentRoomMeta').innerText = `초대코드: ${room.inviteCode} | 인원: ${room.currentCount}/${room.maxCapacity}명`;
             document.getElementById('messageInput').disabled = false;
@@ -579,6 +582,7 @@
             historyLoading = false;
             pendingRoomMessages.forEach(message => appendMessage(message));
             pendingRoomMessages = [];
+            scheduleMissedMessageSync(room.roomId);
         }
 
         function subscribeToRoom(roomId, isFirstJoin = false) {
@@ -618,7 +622,76 @@
             msgs.forEach(m => appendMessage(m));
         }
 
+        function resetRoomMessageState(roomId) {
+            roomMessageState.set(roomId, {
+                seenKeys: new Set(),
+                lastReceivedMessageId: 0
+            });
+        }
+
+        function getRoomMessageState(roomId) {
+            if (!roomMessageState.has(roomId)) {
+                resetRoomMessageState(roomId);
+            }
+            return roomMessageState.get(roomId);
+        }
+
+        function messageKey(m) {
+            if (m.messageId) return `id:${m.messageId}`;
+            return messageSignature(m);
+        }
+
+        function messageSignature(m) {
+            return [
+                'live',
+                m.roomId || '',
+                m.senderId || '',
+                m.messageType || '',
+                m.createdAt || '',
+                m.content || ''
+            ].join(':');
+        }
+
+        function rememberMessage(m) {
+            const state = getRoomMessageState(m.roomId);
+            const key = messageKey(m);
+            const signature = messageSignature(m);
+            if (state.seenKeys.has(key) || state.seenKeys.has(signature)) {
+                updateLastReceivedMessageId(state, m);
+                return false;
+            }
+            state.seenKeys.add(key);
+            state.seenKeys.add(signature);
+            updateLastReceivedMessageId(state, m);
+            return true;
+        }
+
+        function updateLastReceivedMessageId(state, m) {
+            if (m.messageId && m.messageId > state.lastReceivedMessageId) {
+                state.lastReceivedMessageId = m.messageId;
+            }
+        }
+
+        async function syncMissedMessages(roomId) {
+            if (!currentUser || !activeRoom || activeRoom.roomId !== roomId) return;
+            const state = getRoomMessageState(roomId);
+            try {
+                const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}`);
+                if (!res.ok) return;
+                const missed = await res.json();
+                missed.forEach(message => appendMessage(message));
+            } catch (e) {
+                console.log('Message sync failed', e);
+            }
+        }
+
+        function scheduleMissedMessageSync(roomId) {
+            syncMissedMessages(roomId);
+            setTimeout(() => syncMissedMessages(roomId), 1000);
+        }
+
         function appendMessage(m) {
+            if (!rememberMessage(m)) return;
             const container = document.getElementById('messagesContainer');
             // Remove empty prompt if present
             if (container.children.length === 1 && container.children[0].classList.contains('msg-system') && container.children[0].innerText.includes('아직 대화 내역이 없습니다')) {

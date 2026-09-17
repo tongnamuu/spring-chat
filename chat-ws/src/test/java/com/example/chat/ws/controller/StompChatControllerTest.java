@@ -5,7 +5,6 @@ import com.example.chat.common.enums.MessageType;
 import com.example.chat.core.security.ChatPrincipal;
 import com.example.chat.ws.producer.KafkaMessageProducer;
 import org.junit.jupiter.api.Test;
-import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,8 +16,7 @@ class StompChatControllerTest {
     @Test
     void overwritesForgedSenderWithAuthenticatedPrincipal() {
         KafkaMessageProducer kafkaProducer = mock(KafkaMessageProducer.class);
-        SimpMessageSendingOperations messaging = mock(SimpMessageSendingOperations.class);
-        StompChatController controller = new StompChatController(kafkaProducer, messaging);
+        StompChatController controller = new StompChatController(kafkaProducer);
         ChatMessageDto message = ChatMessageDto.builder()
                 .roomId(42L)
                 .senderId(999L)
@@ -35,6 +33,5 @@ class StompChatControllerTest {
         assertThat(message.getSenderId()).isEqualTo(7L);
         assertThat(message.getSenderName()).isEqualTo("Alice");
         verify(kafkaProducer).sendMessage(message);
-        verify(messaging).convertAndSend("/sub/chat/room/42", message);
     }
 }
