@@ -1,5 +1,7 @@
 const { defineConfig } = require('@playwright/test');
 
+const browserChannel = process.env.E2E_BROWSER_CHANNEL || undefined;
+
 module.exports = defineConfig({
   testDir: './tests',
   timeout: 45_000,
@@ -7,7 +9,7 @@ module.exports = defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://localhost',
     browserName: 'chromium',
-    channel: 'chrome',
+    channel: browserChannel,
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure'

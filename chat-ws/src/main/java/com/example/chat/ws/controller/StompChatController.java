@@ -7,7 +7,6 @@ import com.example.chat.ws.producer.KafkaMessageProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 
@@ -20,11 +19,9 @@ public class StompChatController {
     private static final Logger log = LoggerFactory.getLogger(StompChatController.class);
 
     private final KafkaMessageProducer kafkaMessageProducer;
-    private final SimpMessageSendingOperations messagingTemplate;
 
-    public StompChatController(KafkaMessageProducer kafkaMessageProducer, SimpMessageSendingOperations messagingTemplate) {
+    public StompChatController(KafkaMessageProducer kafkaMessageProducer) {
         this.kafkaMessageProducer = kafkaMessageProducer;
-        this.messagingTemplate = messagingTemplate;
     }
 
     @MessageMapping("/chat/message")
@@ -46,11 +43,8 @@ public class StompChatController {
         log.info("Received STOMP message: roomId={}, type={}, sender={}", 
                 message.getRoomId(), message.getMessageType(), message.getSenderName());
 
-        // 1. Send to Kafka for async persistence and streaming
+        // Kafka is the single fanout path so every WebSocket node receives the same message.
         kafkaMessageProducer.sendMessage(message);
-
-        // 2. Broadcast immediately to subscribers of this WebSocket node
-        messagingTemplate.convertAndSend("/sub/chat/room/" + message.getRoomId(), message);
     }
 
     private ChatPrincipal authenticatedPrincipal(Principal principal) {

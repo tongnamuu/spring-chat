@@ -26,6 +26,12 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+    consumer:
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -36,3 +42,8 @@ spring:
       redis:
         namespace: spring-chat:session
         repository-type: indexed
+
+chat:
+  ws:
+    fanout:
+      group-id: ${CHAT_WS_FANOUT_GROUP_ID:${spring.application.name}-${random.uuid}}
