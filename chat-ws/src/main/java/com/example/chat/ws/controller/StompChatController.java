@@ -25,6 +25,12 @@ public class StompChatController {
 
     private final KafkaMessageProducer kafkaMessageProducer;
 
+    @org.springframework.beans.factory.annotation.Value("${chat.ws.debug-node:false}")
+    private boolean debugNode;
+
+    @org.springframework.beans.factory.annotation.Value("${chat.ws.node-id:chat-ws}")
+    private String nodeId;
+
     public StompChatController(KafkaMessageProducer kafkaMessageProducer) {
         this.kafkaMessageProducer = kafkaMessageProducer;
     }
@@ -46,6 +52,7 @@ public class StompChatController {
         ChatPrincipal chatPrincipal = authenticatedPrincipal(principal);
         validateMessage(message);
         message.setMessageId(null);
+        message.setSourceNode(debugNode ? nodeId : null);
         message.setEventId(UUID.randomUUID().toString());
         message.setSenderId(chatPrincipal.userId());
         message.setSenderName(chatPrincipal.nickname());

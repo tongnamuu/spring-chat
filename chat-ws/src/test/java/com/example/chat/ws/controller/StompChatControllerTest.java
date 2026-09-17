@@ -44,11 +44,18 @@ class StompChatControllerTest {
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal, null, java.util.List.of());
 
+        message.setSourceNode("forged-node");
         controller.message(message, authentication);
+        assertThat(message.getSourceNode()).isNull();
 
         assertThat(message.getSenderId()).isEqualTo(7L);
         assertThat(message.getSenderName()).isEqualTo("Alice");
         assertThat(message.getEventId()).isNotBlank();
         verify(kafkaProducer).sendMessage(message);
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "debugNode", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "nodeId", "chat-ws-a");
+        message.setSourceNode("forged-node");
+        controller.message(message, authentication);
+        assertThat(message.getSourceNode()).isEqualTo("chat-ws-a");
     }
 }

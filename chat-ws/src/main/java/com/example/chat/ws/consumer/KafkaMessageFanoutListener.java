@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class KafkaMessageFanoutListener {
@@ -20,6 +21,12 @@ public class KafkaMessageFanoutListener {
     private final SimpMessageSendingOperations messagingTemplate;
     private final FanoutBackpressure backpressure;
     private final ObjectMapper mapper;
+
+    @Value("${chat.ws.debug-node:false}")
+    private boolean debugNode;
+
+    @Value("${chat.ws.node-id:chat-ws}")
+    private String nodeId;
 
     public KafkaMessageFanoutListener(SimpMessageSendingOperations messagingTemplate,
             FanoutBackpressure backpressure, ObjectMapper mapper) {
@@ -39,6 +46,7 @@ public class KafkaMessageFanoutListener {
         backpressure.reserve(destination, payload.length);
         SimpMessageHeaderAccessor headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
         headers.setContentType(org.springframework.util.MimeTypeUtils.APPLICATION_JSON);
+        if (debugNode) headers.setNativeHeader("x-chat-ws-node", nodeId);
         headers.setHeader(FanoutBackpressure.WEIGHT_HEADER, payload.length);
         headers.setLeaveMutable(true);
         messagingTemplate.send(destination, MessageBuilder.createMessage(payload, headers.getMessageHeaders()));

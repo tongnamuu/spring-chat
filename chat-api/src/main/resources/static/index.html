@@ -517,7 +517,13 @@
         function initWebSocket() {
             if (!currentUser) return;
             shouldReconnect = true;
-            const socket = new SockJS('/ws-stomp');
+            const localDevelopment = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+            const pinnedEndpoints = new Map([
+                ['ccccc', '/ws-stomp-a'],
+                ['bbbbb', '/ws-stomp-b']
+            ]);
+            const endpoint = (localDevelopment && pinnedEndpoints.get(currentUser?.username)) || '/ws-stomp';
+            const socket = new SockJS(endpoint);
             stompClient = Stomp.over(socket);
             stompClient.debug = null;
             
@@ -614,6 +620,8 @@
                 if (!activeRoom || activeRoom.roomId !== roomId) return;
                 const payload = JSON.parse(msg.body);
                 const batch = payload.messages ? payload : { roomId, previousMessageId: 0, messages: [payload] };
+                const deliveryNode = msg.headers?.['x-chat-ws-node'];
+                batch.messages.forEach(message => { message.deliveryNode = deliveryNode; });
                 const state = getRoomMessageState(roomId);
                 if (historyLoading || batch.previousMessageId > state.lastReceivedMessageId) {
                     bufferRoomBatch(batch);
@@ -810,6 +818,13 @@
                 sender.innerText = m.senderName || '알 수 없음';
                 div.appendChild(sender);
                 div.appendChild(document.createTextNode(m.content));
+            }
+            if (m.deliveryNode || m.sourceNode) {
+                const node = document.createElement('div');
+                node.className = 'msg-sender';
+                node.textContent = [m.sourceNode && `발신 WS: ${m.sourceNode}`,
+                    m.deliveryNode && `수신 WS: ${m.deliveryNode}`].filter(Boolean).join(' | ');
+                div.appendChild(node);
             }
             return div;
         }

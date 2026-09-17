@@ -83,6 +83,8 @@ services:
       dockerfile: Dockerfile.chat-ws
     container_name: spring-chat-ws
     environment:
+      CHAT_WS_DEBUG_NODE: "true"
+      CHAT_WS_NODE_ID: chat-ws
       JAVA_TOOL_OPTIONS: ${CHAT_JAVA_TOOL_OPTIONS:--Xms64m -Xmx256m}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
       SPRING_DATASOURCE_USERNAME: chatuser
@@ -104,6 +106,8 @@ services:
       dockerfile: Dockerfile.chat-ws
     container_name: spring-chat-ws-a
     environment:
+      CHAT_WS_DEBUG_NODE: "true"
+      CHAT_WS_NODE_ID: chat-ws-a
       JAVA_TOOL_OPTIONS: ${CHAT_JAVA_TOOL_OPTIONS:--Xms64m -Xmx256m}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
       SPRING_DATASOURCE_USERNAME: chatuser
@@ -125,6 +129,8 @@ services:
       dockerfile: Dockerfile.chat-ws
     container_name: spring-chat-ws-b
     environment:
+      CHAT_WS_DEBUG_NODE: "true"
+      CHAT_WS_NODE_ID: chat-ws-b
       JAVA_TOOL_OPTIONS: ${CHAT_JAVA_TOOL_OPTIONS:--Xms64m -Xmx256m}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatdb
       SPRING_DATASOURCE_USERNAME: chatuser

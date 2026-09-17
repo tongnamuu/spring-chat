@@ -6,6 +6,10 @@ import java.time.ZonedDateTime;
 public class ChatMessageDto {
     private Long messageId;
     private String eventId;
+    private String sourceNode;
+
+    public String getSourceNode() { return sourceNode; }
+    public void setSourceNode(String sourceNode) { this.sourceNode = sourceNode; }
     private Long roomId;
     private Long senderId;
     private String senderName;

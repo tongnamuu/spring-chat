@@ -17,6 +17,25 @@ import static org.mockito.Mockito.verify;
 class KafkaMessageFanoutListenerTest {
 
     @Test
+    void exposesDeliveryNodeOnlyWhenDebugIsEnabled() {
+        var messaging = mock(SimpMessageSendingOperations.class);
+        var mapper = mock(ObjectMapper.class);
+        var listener = new KafkaMessageFanoutListener(messaging, mock(FanoutBackpressure.class), mapper);
+        var batch = new ChatMessageBatch(42L, 0, List.of());
+        when(mapper.writeValueAsBytes(batch)).thenReturn(new byte[0]);
+        org.springframework.test.util.ReflectionTestUtils.setField(listener, "nodeId", "chat-ws-a");
+        listener.fanout(batch);
+        org.springframework.test.util.ReflectionTestUtils.setField(listener, "debugNode", true);
+        listener.fanout(batch);
+        var captured = org.mockito.ArgumentCaptor.forClass(org.springframework.messaging.Message.class);
+        verify(messaging, org.mockito.Mockito.times(2)).send(eq("/sub/chat/room/42"), captured.capture());
+        var first = org.springframework.messaging.simp.SimpMessageHeaderAccessor.wrap(captured.getAllValues().get(0));
+        var second = org.springframework.messaging.simp.SimpMessageHeaderAccessor.wrap(captured.getAllValues().get(1));
+        org.assertj.core.api.Assertions.assertThat(first.getFirstNativeHeader("x-chat-ws-node")).isNull();
+        org.assertj.core.api.Assertions.assertThat(second.getFirstNativeHeader("x-chat-ws-node")).isEqualTo("chat-ws-a");
+    }
+
+    @Test
     void broadcastsConsumedKafkaMessageToLocalRoomSubscribers() {
         SimpMessageSendingOperations messaging = mock(SimpMessageSendingOperations.class);
         FanoutBackpressure backpressure = mock(FanoutBackpressure.class);
