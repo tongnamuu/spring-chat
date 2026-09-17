@@ -15,6 +15,7 @@ class KafkaMessageFanoutListenerTest {
         SimpMessageSendingOperations messaging = mock(SimpMessageSendingOperations.class);
         KafkaMessageFanoutListener listener = new KafkaMessageFanoutListener(messaging);
         ChatMessageDto message = ChatMessageDto.builder()
+                .eventId("event-1")
                 .roomId(42L)
                 .senderId(7L)
                 .senderName("Alice")

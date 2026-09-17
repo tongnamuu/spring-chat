@@ -637,6 +637,7 @@
         }
 
         function messageKey(m) {
+            if (m.eventId) return `event:${m.eventId}`;
             if (m.messageId) return `id:${m.messageId}`;
             return messageSignature(m);
         }

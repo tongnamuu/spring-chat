@@ -8,9 +8,12 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessageEntity, Long> {
+    Optional<ChatMessageEntity> findByEventId(String eventId);
+
     List<ChatMessageEntity> findByRoomIdOrderByMessageIdDesc(Long roomId, Pageable pageable);
 
     @Query("SELECT m FROM ChatMessageEntity m WHERE m.roomId = :roomId AND m.messageId > :lastReceivedMessageId ORDER BY m.messageId ASC")
