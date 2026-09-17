@@ -10,12 +10,28 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class StompChatControllerTest {
 
     @Test
+    void validatesEntireBatchBeforePublishingAnyMessage() {
+        KafkaMessageProducer producer = mock(KafkaMessageProducer.class);
+        StompChatController controller = new StompChatController(producer);
+        ChatMessageDto valid = ChatMessageDto.builder().roomId(42L).messageType(MessageType.TALK).content("hello").build();
+        ChatMessageDto invalid = ChatMessageDto.builder().roomId(42L).messageType(MessageType.TALK).content("x".repeat(2001)).build();
+        assertThatThrownBy(() -> controller.messages(java.util.List.of(valid, invalid), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(producer);
+    }
+
+    @Test
     void overwritesForgedSenderWithAuthenticatedPrincipal() {
         KafkaMessageProducer kafkaProducer = mock(KafkaMessageProducer.class);
+        when(kafkaProducer.sendMessage(any())).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(null));
         StompChatController controller = new StompChatController(kafkaProducer);
         ChatMessageDto message = ChatMessageDto.builder()
                 .roomId(42L)

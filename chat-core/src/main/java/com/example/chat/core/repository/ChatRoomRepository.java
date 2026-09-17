@@ -17,6 +17,10 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoomEntity, Long> 
     Optional<ChatRoomEntity> findByInviteCode(String inviteCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM ChatRoomEntity r WHERE r.inviteCode = :inviteCode")
+    Optional<ChatRoomEntity> findByInviteCodeForUpdate(@Param("inviteCode") String inviteCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM ChatRoomEntity r WHERE r.roomId = :roomId")
     Optional<ChatRoomEntity> findByIdForUpdate(@Param("roomId") Long roomId);
 

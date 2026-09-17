@@ -69,10 +69,11 @@ public class ChatRoomController {
     public ResponseEntity<List<ChatMessageDto>> getMissedMessages(
             @AuthenticationPrincipal ChatPrincipal principal,
             @PathVariable("roomId") Long roomId,
-            @RequestParam("lastReceivedMessageId") Long lastReceivedMessageId
+            @RequestParam("lastReceivedMessageId") Long lastReceivedMessageId,
+            @RequestParam(name = "throughMessageId", defaultValue = "9223372036854775807") Long throughMessageId
     ) {
         List<ChatMessageDto> missed = chatRoomService.getMissedMessages(
-                principal.userId(), roomId, lastReceivedMessageId);
+                principal.userId(), roomId, lastReceivedMessageId, throughMessageId);
         return ResponseEntity.ok(missed);
     }
 }

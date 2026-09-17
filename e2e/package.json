@@ -2,9 +2,12 @@
   "name": "spring-chat-e2e",
   "private": true,
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "load:room": "node load/room-throughput.cjs"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1"
+    "@playwright/test": "1.62.1",
+    "@stomp/stompjs": "7.3.0",
+    "ws": "8.21.3"
   }
 }

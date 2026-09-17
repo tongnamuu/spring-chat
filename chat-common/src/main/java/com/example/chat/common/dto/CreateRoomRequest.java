@@ -14,7 +14,7 @@ public class CreateRoomRequest {
     private RoomType roomType;
 
     @Min(value = 2, message = "Capacity must be at least 2")
-    @Max(value = 50, message = "Capacity cannot exceed 50")
+    @Max(value = 1500, message = "Capacity cannot exceed 1500")
     private Integer maxCapacity = 50;
 
     private Long targetUserId;

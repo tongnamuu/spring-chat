@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -55,7 +57,7 @@ public class ChatRoomService {
 
         if (request.getRoomType() == RoomType.DIRECT) {
             maxCapacity = 2;
-        } else if (maxCapacity < 2 || maxCapacity > 50) {
+        } else if (maxCapacity < 2 || maxCapacity > 1500) {
             throw new ChatException(ErrorCode.INVALID_ROOM_CAPACITY);
         }
 
@@ -107,15 +109,14 @@ public class ChatRoomService {
                 .filter(candidate -> candidate.getStatus() == UserStatus.ACTIVE)
                 .orElseThrow(() -> new ChatException(ErrorCode.USER_NOT_FOUND));
 
-        ChatRoomEntity room = chatRoomRepository.findByInviteCode(inviteCode)
+        ChatRoomEntity room = chatRoomRepository.findByInviteCodeForUpdate(inviteCode)
                 .orElseThrow(() -> new ChatException(ErrorCode.INVALID_INVITE_CODE));
 
         if (chatRoomMemberRepository.existsByRoomIdAndUserId(room.getRoomId(), user.getUserId())) {
             throw new ChatException(ErrorCode.ALREADY_JOINED);
         }
 
-        int updatedRows = chatRoomRepository.incrementCurrentCountIfSpaceAvailable(room.getRoomId());
-        if (updatedRows == 0) {
+        if (room.getCurrentCount() >= room.getMaxCapacity()) {
             throw new ChatException(ErrorCode.ROOM_FULL);
         }
 
@@ -149,24 +150,26 @@ public class ChatRoomService {
         }
 
         List<ChatMessageEntity> messages = chatMessageRepository.findByRoomIdOrderByMessageIdDesc(
-                roomId, PageRequest.of(0, Math.min(limit, 100))
+                roomId, PageRequest.of(0, Math.max(1, Math.min(limit, 100)))
         );
 
-        return messages.stream()
-                .map(this::convertMessageToDto)
-                .collect(Collectors.toList());
+        return convertMessagesToDtos(messages);
     }
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getMissedMessages(Long userId, Long roomId, Long lastReceivedMessageId) {
+        return getMissedMessages(userId, roomId, lastReceivedMessageId, Long.MAX_VALUE);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatMessageDto> getMissedMessages(Long userId, Long roomId, Long lastReceivedMessageId, Long throughMessageId) {
         if (!chatRoomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
             throw new ChatException(ErrorCode.NOT_ROOM_MEMBER);
         }
 
-        List<ChatMessageEntity> missedMessages = chatMessageRepository.findMissedMessages(roomId, lastReceivedMessageId);
-        return missedMessages.stream()
-                .map(this::convertMessageToDto)
-                .collect(Collectors.toList());
+        List<ChatMessageEntity> missedMessages = chatMessageRepository.findMissedMessages(
+                roomId, lastReceivedMessageId, throughMessageId, PageRequest.of(0, 500));
+        return convertMessagesToDtos(missedMessages);
     }
 
     private String generateUniqueInviteCode() {
@@ -186,8 +189,14 @@ public class ChatRoomService {
                 .build();
     }
 
-    private ChatMessageDto convertMessageToDto(ChatMessageEntity entity) {
-        UserEntity sender = userRepository.findById(entity.getSenderId()).orElse(null);
+    private List<ChatMessageDto> convertMessagesToDtos(List<ChatMessageEntity> messages) {
+        Map<Long, UserEntity> senders = userRepository.findAllById(
+                messages.stream().map(ChatMessageEntity::getSenderId).distinct().toList())
+                .stream().collect(Collectors.toMap(UserEntity::getUserId, Function.identity()));
+        return messages.stream().map(entity -> convertMessageToDto(entity, senders.get(entity.getSenderId()))).toList();
+    }
+
+    private ChatMessageDto convertMessageToDto(ChatMessageEntity entity, UserEntity sender) {
         boolean withdrawnSender = sender == null || sender.isWithdrawn();
         String senderName = withdrawnSender ? UserEntity.WITHDRAWN_NICKNAME : sender.getNickname();
         String content = withdrawnSender ? anonymizeSystemMessage(entity.getMessageType(), entity.getContent()) : entity.getContent();

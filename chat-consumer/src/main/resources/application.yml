@@ -14,7 +14,21 @@ spring:
       ddl-auto: update
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      ack-mode: batch
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      properties:
+        enable.idempotence: true
+        linger.ms: 0
+        batch.size: 65536
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
     consumer:
+      enable-auto-commit: false
+      max-poll-records: 500
       group-id: chat-db-persistence-group
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
