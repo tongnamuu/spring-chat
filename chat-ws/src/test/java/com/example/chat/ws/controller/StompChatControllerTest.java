@@ -32,6 +32,7 @@ class StompChatControllerTest {
 
         assertThat(message.getSenderId()).isEqualTo(7L);
         assertThat(message.getSenderName()).isEqualTo("Alice");
+        assertThat(message.getEventId()).isNotBlank();
         verify(kafkaProducer).sendMessage(message);
     }
 }

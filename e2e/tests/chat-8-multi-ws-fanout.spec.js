@@ -38,6 +38,12 @@ async function recordedContents(page, recorderName) {
     .map(message => message.content), recorderName);
 }
 
+async function recordedEventIds(page, recorderName) {
+  return page.evaluate((name) => window[name]
+    .filter(message => message.messageType === 'TALK')
+    .map(message => message.eventId), recorderName);
+}
+
 test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed reconnect messages', async ({ browser, request }) => {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const aliceUsername = `chat8_alice_${suffix}`;
@@ -96,6 +102,11 @@ test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed 
       'cross-node-2',
       'cross-node-3'
     ]);
+    const aliceEventIds = await recordedEventIds(alice, '__chat8Messages');
+    const bobEventIds = await recordedEventIds(bob, '__chat8Messages');
+    expect(aliceEventIds).toHaveLength(3);
+    expect(aliceEventIds.every(Boolean)).toBe(true);
+    expect(bobEventIds).toEqual(aliceEventIds);
 
     await bob.evaluate(() => disconnectRealtime());
     await expect(bob.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');

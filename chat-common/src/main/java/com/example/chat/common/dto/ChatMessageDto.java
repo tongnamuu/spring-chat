@@ -5,6 +5,7 @@ import java.time.ZonedDateTime;
 
 public class ChatMessageDto {
     private Long messageId;
+    private String eventId;
     private Long roomId;
     private Long senderId;
     private String senderName;
@@ -14,8 +15,9 @@ public class ChatMessageDto {
 
     public ChatMessageDto() {}
 
-    public ChatMessageDto(Long messageId, Long roomId, Long senderId, String senderName, MessageType messageType, String content, ZonedDateTime createdAt) {
+    public ChatMessageDto(Long messageId, String eventId, Long roomId, Long senderId, String senderName, MessageType messageType, String content, ZonedDateTime createdAt) {
         this.messageId = messageId;
+        this.eventId = eventId;
         this.roomId = roomId;
         this.senderId = senderId;
         this.senderName = senderName;
@@ -30,6 +32,9 @@ public class ChatMessageDto {
 
     public Long getMessageId() { return messageId; }
     public void setMessageId(Long messageId) { this.messageId = messageId; }
+
+    public String getEventId() { return eventId; }
+    public void setEventId(String eventId) { this.eventId = eventId; }
 
     public Long getRoomId() { return roomId; }
     public void setRoomId(Long roomId) { this.roomId = roomId; }
@@ -51,6 +56,7 @@ public class ChatMessageDto {
 
     public static class Builder {
         private Long messageId;
+        private String eventId;
         private Long roomId;
         private Long senderId;
         private String senderName;
@@ -59,6 +65,7 @@ public class ChatMessageDto {
         private ZonedDateTime createdAt;
 
         public Builder messageId(Long messageId) { this.messageId = messageId; return this; }
+        public Builder eventId(String eventId) { this.eventId = eventId; return this; }
         public Builder roomId(Long roomId) { this.roomId = roomId; return this; }
         public Builder senderId(Long senderId) { this.senderId = senderId; return this; }
         public Builder senderName(String senderName) { this.senderName = senderName; return this; }
@@ -67,7 +74,7 @@ public class ChatMessageDto {
         public Builder createdAt(ZonedDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public ChatMessageDto build() {
-            return new ChatMessageDto(messageId, roomId, senderId, senderName, messageType, content, createdAt);
+            return new ChatMessageDto(messageId, eventId, roomId, senderId, senderName, messageType, content, createdAt);
         }
     }
 }

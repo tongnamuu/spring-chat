@@ -194,6 +194,7 @@ public class ChatRoomService {
 
         return ChatMessageDto.builder()
                 .messageId(entity.getMessageId())
+                .eventId(entity.getEventId())
                 .roomId(entity.getRoomId())
                 .senderId(entity.getSenderId())
                 .senderName(senderName)

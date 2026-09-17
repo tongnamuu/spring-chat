@@ -9,18 +9,25 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.ZonedDateTime;
 
 @Entity
-@Table(name = "chat_message")
+@Table(
+    name = "chat_message",
+    uniqueConstraints = @UniqueConstraint(name = "uk_chat_message_event_id", columnNames = "event_id")
+)
 public class ChatMessageEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "message_id")
     private Long messageId;
+
+    @Column(name = "event_id", length = 36, unique = true)
+    private String eventId;
 
     @Column(name = "room_id", nullable = false)
     private Long roomId;
@@ -41,8 +48,9 @@ public class ChatMessageEntity {
 
     public ChatMessageEntity() {}
 
-    public ChatMessageEntity(Long messageId, Long roomId, Long senderId, MessageType messageType, String content, ZonedDateTime createdAt) {
+    public ChatMessageEntity(Long messageId, String eventId, Long roomId, Long senderId, MessageType messageType, String content, ZonedDateTime createdAt) {
         this.messageId = messageId;
+        this.eventId = eventId;
         this.roomId = roomId;
         this.senderId = senderId;
         this.messageType = messageType;
@@ -56,6 +64,9 @@ public class ChatMessageEntity {
 
     public Long getMessageId() { return messageId; }
     public void setMessageId(Long messageId) { this.messageId = messageId; }
+
+    public String getEventId() { return eventId; }
+    public void setEventId(String eventId) { this.eventId = eventId; }
 
     public Long getRoomId() { return roomId; }
     public void setRoomId(Long roomId) { this.roomId = roomId; }
@@ -74,6 +85,7 @@ public class ChatMessageEntity {
 
     public static class Builder {
         private Long messageId;
+        private String eventId;
         private Long roomId;
         private Long senderId;
         private MessageType messageType;
@@ -81,6 +93,7 @@ public class ChatMessageEntity {
         private ZonedDateTime createdAt;
 
         public Builder messageId(Long messageId) { this.messageId = messageId; return this; }
+        public Builder eventId(String eventId) { this.eventId = eventId; return this; }
         public Builder roomId(Long roomId) { this.roomId = roomId; return this; }
         public Builder senderId(Long senderId) { this.senderId = senderId; return this; }
         public Builder messageType(MessageType messageType) { this.messageType = messageType; return this; }
@@ -88,7 +101,7 @@ public class ChatMessageEntity {
         public Builder createdAt(ZonedDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public ChatMessageEntity build() {
-            return new ChatMessageEntity(messageId, roomId, senderId, messageType, content, createdAt);
+            return new ChatMessageEntity(messageId, eventId, roomId, senderId, messageType, content, createdAt);
         }
     }
 }

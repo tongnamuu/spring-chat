@@ -12,6 +12,7 @@ import org.springframework.stereotype.Controller;
 
 import java.time.ZonedDateTime;
 import java.security.Principal;
+import java.util.UUID;
 
 @Controller
 public class StompChatController {
@@ -27,6 +28,7 @@ public class StompChatController {
     @MessageMapping("/chat/message")
     public void message(ChatMessageDto message, Principal principal) {
         ChatPrincipal chatPrincipal = authenticatedPrincipal(principal);
+        message.setEventId(UUID.randomUUID().toString());
         message.setSenderId(chatPrincipal.userId());
         message.setSenderName(chatPrincipal.nickname());
 
