@@ -265,6 +265,7 @@
         let pendingRoomMessageCount = 0;
         let pendingRoomOverflow = false;
         let roomSelectionVersion = 0;
+        let roomSyncTimer = null;
         let pendingRenderMessages = [];
         let renderFrame = null;
         const MAX_VISIBLE_MESSAGES = 500;
@@ -425,6 +426,9 @@
         }
 
         function disconnectRealtime() {
+            roomSelectionVersion++;
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             shouldReconnect = false;
             if (reconnectTimer) clearTimeout(reconnectTimer);
             if (currentSubscription) {
@@ -438,6 +442,8 @@
         }
 
         function resetToLogin() {
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             roomSelectionVersion++;
             roomMessageState.clear();
             pendingRoomMessages = [];
@@ -544,6 +550,8 @@
                     scheduleMissedMessageSync(activeRoom.roomId);
                 }
             }, function (error) {
+                clearTimeout(roomSyncTimer);
+                roomSyncTimer = null;
                 console.log('STOMP Connection error, auto-reconnecting...', error);
                 const indicator = document.getElementById('statusIndicator');
                 indicator.classList.remove('connected');
@@ -587,6 +595,8 @@
         }
 
         async function selectRoom(room, isFirstJoin = false) {
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             roomSelectionVersion++;
             activeRoom = room;
             historyLoading = true;
@@ -719,6 +729,8 @@
             if (!currentUser || !activeRoom || activeRoom.roomId !== roomId) return;
             const state = getRoomMessageState(roomId);
             if (state.syncing) return;
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = null;
             state.syncing = true;
             historyLoading = true;
             const version = roomSelectionVersion;
@@ -726,7 +738,7 @@
             try {
                 do {
                     pendingRoomOverflow = false;
-                    const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`);
+                    const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`, { signal: AbortSignal.timeout(10000) });
                     if (!headResponse.ok) throw new Error('History unavailable');
                     const head = await headResponse.json();
                     if (!isCurrent()) return;
@@ -737,7 +749,7 @@
                     }
                     // Freeze the upper bound; new live messages remain buffered.
                     while (state.lastReceivedMessageId < through) {
-                        const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`);
+                        const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`, { signal: AbortSignal.timeout(10000) });
                         if (!res.ok) throw new Error('Sync unavailable');
                         const missed = await res.json();
                         if (!isCurrent()) return;
@@ -761,11 +773,14 @@
                 if (isCurrent()) historyLoading = false;
             } catch (e) {
                 console.log('Message sync failed', e);
-                if (isCurrent()) setTimeout(() => {
-                    if (isCurrent()) syncMissedMessages(roomId, initial);
-                }, 1000);
             } finally {
                 state.syncing = false;
+                if (isCurrent() && stompClient?.connected) {
+                    roomSyncTimer = setTimeout(() => {
+                        roomSyncTimer = null;
+                        if (isCurrent() && stompClient?.connected) syncMissedMessages(roomId, initial);
+                    }, 1000);
+                }
             }
         }
 
