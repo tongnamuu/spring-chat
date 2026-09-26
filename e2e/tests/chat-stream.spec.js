@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
 async function prepare(page) {
+  const initialHistory = route => route.fulfill({ json: [] });
+  await page.route('**/api/rooms/42/messages?*', initialHistory);
   await page.goto('/');
   await expect(page.locator('#loginModal')).toBeVisible();
   await page.evaluate(() => {
@@ -14,7 +16,10 @@ async function prepare(page) {
       subscribe: (_, callback) => { window.deliver = callback; return { unsubscribe() {} }; }
     };
     subscribeToRoom(42);
+    window.deliver({ body: JSON.stringify({ subscriptionReady: true }) });
   });
+  await expect(page.locator("#sendBtn")).toBeEnabled();
+  await page.unroute("**/api/rooms/42/messages?*", initialHistory);
 }
 
 test('hot-room UI accepts all IDs while bounding DOM, render queue and dedup state', async ({ page }) => {
@@ -65,4 +70,34 @@ test('a live batch gap triggers bounded recovery before advancing the cursor', a
   await expect.poll(() => page.evaluate(() => getRoomMessageState(42).lastReceivedMessageId)).toBe(1201);
   expect(pages).toEqual([0, 500, 1000]);
   await expect(page.locator('#messagesContainer > .msg')).toHaveCount(500);
+});
+
+test('composer waits for subscription readiness and history before enabling sends', async ({ page }) => {
+  let releaseHistory;
+  const historyGate = new Promise(resolve => { releaseHistory = resolve; });
+  let historyRequests = 0;
+  await page.route('**/api/rooms/42/messages?*', async route => {
+    historyRequests++;
+    await historyGate;
+    await route.fulfill({ json: [] });
+  });
+  await page.goto('/');
+  await expect(page.locator('#loginModal')).toBeVisible();
+  await page.evaluate(async () => {
+    currentUser = { userId: 1, nickname: 'Test' };
+    stompClient = { connected: true, subscribe: (_, callback) => {
+      window.deliver = callback;
+      return { unsubscribe() {} };
+    } };
+    await selectRoom({ roomId: 42, title: 'Readiness test' });
+  });
+  await expect(page.locator('#statusText')).toHaveText('구독 준비 중');
+  await expect(page.locator('#sendBtn')).toBeDisabled();
+  expect(historyRequests).toBe(0);
+  await page.evaluate(() => window.deliver({ body: JSON.stringify({ subscriptionReady: true }) }));
+  await expect(page.locator('#statusText')).toHaveText('메시지 복구 중');
+  await expect(page.locator('#sendBtn')).toBeDisabled();
+  releaseHistory();
+  await expect(page.locator('#sendBtn')).toBeEnabled();
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 });

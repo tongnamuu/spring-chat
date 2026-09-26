@@ -5,11 +5,13 @@ const WebSocket = require('ws');
 const { setTimeout: delay } = require('node:timers/promises');
 const base = process.env.BASE_URL || 'http://localhost';
 const password = 'LifecycleTest123!';
+const apiTimeoutMs = Number(process.env.API_TIMEOUT_MS || 10000);
+const testTimeoutMs = Number(process.env.TEST_TIMEOUT_MS || 45000);
 
 async function api(path, cookie, data, method = 'POST') {
   const res = await fetch(base + path, {
     method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
-    body: JSON.stringify(data), signal: AbortSignal.timeout(10000)
+    body: JSON.stringify(data), signal: AbortSignal.timeout(apiTimeoutMs)
   });
   assert.ok(res.ok, `${path}: ${res.status}`);
   return res;
@@ -29,7 +31,7 @@ async function until(predicate) {
 }
 
 for (const action of ['logout', 'withdraw']) {
-  test(`${action} closes receive-only sockets on both WS nodes`, { timeout: 45000 }, async () => {
+  test(`${action} closes receive-only sockets on both WS nodes`, { timeout: testTimeoutMs }, async () => {
     const clients = [];
     async function connect(cookie, endpoint, roomId) {
       const state = { closed: false, messages: [] };
@@ -41,13 +43,17 @@ for (const action of ['logout', 'withdraw']) {
       clients.push(client);
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Connect timeout')), 10000);
-        client.onConnect = () => {
+        client.onConnect = frame => {
+          assert.equal(frame.headers['heart-beat'], '10000,10000');
           client.subscribe(`/sub/chat/room/${roomId}`, frame => {
             const batch = JSON.parse(frame.body);
+            if (batch.subscriptionReady) {
+              clearTimeout(timer);
+              resolve();
+              return;
+            }
             state.messages.push(...batch.messages.map(m => m.content));
           });
-          clearTimeout(timer);
-          resolve();
         };
         client.onStompError = () => { clearTimeout(timer); reject(new Error('STOMP error')); };
         client.activate();
