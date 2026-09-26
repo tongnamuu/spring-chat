@@ -18,16 +18,17 @@ async function login(page, username) {
   await page.locator('#passwordInput').fill(PASSWORD);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeHidden();
-  await expect(page.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 }
 
 async function installMessageRecorder(page, name) {
   await page.evaluate((recorderName) => {
     window[recorderName] = [];
-    const originalAppendMessage = window.appendMessage;
-    window.appendMessage = message => {
-      window[recorderName].push(message);
-      originalAppendMessage(message);
+    const originalRememberMessage = window.rememberMessage;
+    window.rememberMessage = message => {
+      const accepted = originalRememberMessage(message);
+      if (accepted) window[recorderName].push(message);
+      return accepted;
     };
   }, name);
 }
@@ -79,6 +80,8 @@ test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed 
     await bob.locator('#inviteCodeInput').fill(room.inviteCode);
     await bob.locator('#joinRoomModal .btn-primary').click();
     await expect(bob.locator('#currentRoomTitle')).toHaveText(`CHAT-8 E2E ${suffix}`);
+    await expect(alice.locator('#sendBtn')).toBeEnabled();
+    await expect(bob.locator('#sendBtn')).toBeEnabled();
 
     await installMessageRecorder(alice, '__chat8Messages');
     await installMessageRecorder(bob, '__chat8Messages');
@@ -109,8 +112,29 @@ test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed 
     expect(aliceEventIds.every(Boolean)).toBe(true);
     expect(bobEventIds).toEqual(aliceEventIds);
 
-    await bob.evaluate(() => disconnectRealtime());
-    await expect(bob.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+    // Drop one real inbound batch while keeping the connection alive.
+    await bob.evaluate(() => {
+      const originalParse = JSON.parse;
+      JSON.parse = function (text, ...args) {
+        const payload = originalParse(text, ...args);
+        if (payload.messages?.some(message => message.content === 'dropped-final-message')) {
+          JSON.parse = originalParse;
+          window.__droppedTail = true;
+          return { ...payload, messages: [] };
+        }
+        return payload;
+      };
+    });
+    await alice.locator('#messageInput').fill('dropped-final-message');
+    await alice.locator('#sendBtn').click();
+    await expect.poll(() => bob.evaluate(() => window.__droppedTail)).toBe(true);
+    await expect(bob.locator('#messagesContainer > .msg').filter({ hasText: 'dropped-final-message' }))
+      .toHaveCount(1, { timeout: 15_000 });
+
+    await bob.locator('#messageInput').fill('preserved-draft');
+    await bobContext.setOffline(true);
+    await expect(bob.locator('#statusText')).toHaveText('오프라인');
+    await expect(bob.locator('#sendBtn')).toBeDisabled();
 
     await alice.evaluate(() => {
       stompClient.send('/pub/chat/message', {}, JSON.stringify({
@@ -121,11 +145,13 @@ test('CHAT-8 fans out messages across pinned chat-ws instances and syncs missed 
     });
 
     await expect.poll(() => recordedContents(alice, '__chat8Messages')).toContain('missed-while-bob-disconnected');
-    await bob.evaluate(() => initWebSocket());
+    await bobContext.setOffline(false);
 
     await expect.poll(() => recordedContents(bob, '__chat8Messages'), { timeout: 15_000 }).toContain('missed-while-bob-disconnected');
     const bobContents = await recordedContents(bob, '__chat8Messages');
     expect(bobContents.filter(content => content === 'missed-while-bob-disconnected')).toHaveLength(1);
+    await expect(bob.locator('#sendBtn')).toBeEnabled();
+    await expect(bob.locator('#messageInput')).toHaveValue('preserved-draft');
 
     await bob.evaluate(() => disconnectRealtime());
     await alice.evaluate(() => {

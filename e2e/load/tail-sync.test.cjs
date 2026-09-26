@@ -35,9 +35,9 @@ function setup() {
     stompClient = {connected: true, subscribe(destination, callback) {globalThis.receive = callback; return {unsubscribe() {}}}, disconnect() {}};
     resetRoomMessageState(42); renderMessages = messages => messages.forEach(appendMessage);`);
   return { run, context, timers, setLatest: n => { latest = n; }, requests: () => requests,
-    tick: async () => {
+    tick: async (minimum = 1000, maximum = 2000) => {
       const [id, timer] = timers.entries().next().value;
-      assert.ok(timer.ms >= 1000 && timer.ms <= 2000);
+      assert.ok(timer.ms >= minimum && timer.ms <= maximum);
       timers.delete(id);
       timer.callback();
       await new Promise(resolve => setImmediate(resolve));
@@ -60,7 +60,7 @@ for (const initial of [true, false]) {
     assert.equal(s.run('pendingRenderMessages.filter(m => m.messageId === 101).length'), 1);
     s.run('receive({body: JSON.stringify({subscriptionReady: true})})');
     assert.equal(s.run('pendingRenderMessages.filter(m => m.messageId === 101).length'), 1);
-    assert.equal(s.timers.size, 0);
+    assert.equal(s.timers.size, 1);
   });
 }
 
@@ -103,7 +103,7 @@ test('failed history request schedules only one retry and recovers', async () =>
   s.context.fetch = fetch;
   await s.tick();
   assert.equal(s.run('getRoomMessageState(42).lastReceivedMessageId'), 100);
-  assert.equal(s.timers.size, 0);
+  assert.equal(s.timers.size, 1);
 });
 
 test('offline invalidates an in-flight response and preserves cursor and unsent input', async () => {
@@ -134,7 +134,7 @@ test('live messages before readiness are buffered until history completes', asyn
   s.run('receive({body: JSON.stringify({subscriptionReady: true})})');
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(s.run('getRoomMessageState(42).lastReceivedMessageId'), 101);
-  assert.equal(s.timers.size, 0);
+  assert.equal(s.timers.size, 1);
 });
 
 test('subscription timeout reconnects without querying history', async () => {
@@ -157,4 +157,31 @@ test('recovery from an initialized empty room does not truncate to recent histor
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(s.requests(), 4);
   assert.equal(s.run('getRoomMessageState(42).lastReceivedMessageId'), 1200);
+});
+
+test('periodic check recovers a dropped final message without another live event', async () => {
+  const s = setup();
+  await s.run('syncMissedMessages(42, true)');
+  s.setLatest(101);
+  await s.tick(5000, 6000);
+  assert.equal(s.run('getRoomMessageState(42).lastReceivedMessageId'), 101);
+  assert.equal(s.run('pendingRenderMessages.filter(m => m.messageId === 101).length'), 1);
+  await s.tick(5000, 6000);
+  assert.equal(s.run('pendingRenderMessages.filter(m => m.messageId === 101).length'), 1);
+  assert.equal(s.timers.size, 1);
+});
+
+test('periodic head failure retries and a stale response cannot restart polling', async () => {
+  const s = setup();
+  await s.run('syncMissedMessages(42, true)');
+  s.context.fetch = async () => { throw new Error('offline'); };
+  await s.tick(5000, 6000);
+  assert.equal(s.timers.size, 1);
+  let release;
+  s.context.fetch = () => new Promise(resolve => { release = resolve; });
+  await s.tick(5000, 6000);
+  s.run('disconnectRealtime(); resetToLogin()');
+  release({ok: true, json: async () => [{messageId: 101}]});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(s.timers.size, 0);
 });

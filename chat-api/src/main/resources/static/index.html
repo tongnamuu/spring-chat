@@ -829,8 +829,34 @@
                         roomSyncTimer = null;
                         if (isCurrent() && stompClient?.connected) syncMissedMessages(roomId, initial);
                     }, 1000 + Math.random() * 1000);
+                } else if (isCurrent() && !historyLoading) {
+                    scheduleTailCheck(roomId, version);
                 }
             }
+        }
+
+        function scheduleTailCheck(roomId, version) {
+            const isCurrent = () => version === roomSelectionVersion && currentUser &&
+                activeRoom?.roomId === roomId && roomReady && stompClient?.connected;
+            if (!isCurrent()) return;
+            clearTimeout(roomSyncTimer);
+            roomSyncTimer = setTimeout(async () => {
+                roomSyncTimer = null;
+                if (!isCurrent()) return;
+                try {
+                    const response = await fetch(`/api/rooms/${roomId}/messages?limit=1`, { signal: AbortSignal.timeout(10000) });
+                    if (!response.ok) throw new Error('History unavailable');
+                    const head = await response.json();
+                    if (!isCurrent()) return;
+                    if ((head[0]?.messageId || 0) > getRoomMessageState(roomId).lastReceivedMessageId) {
+                        await syncMissedMessages(roomId);
+                        return;
+                    }
+                } catch (error) {
+                    console.log('Tail check failed', error);
+                }
+                if (isCurrent() && !historyLoading) scheduleTailCheck(roomId, version);
+            }, 5000 + Math.random() * 1000);
         }
 
         function scheduleMissedMessageSync(roomId) {

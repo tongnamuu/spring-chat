@@ -16,7 +16,7 @@ test('CHAT-2 password-confirmed account withdrawal returns to login and blocks r
   await page.locator('#passwordInput').fill(password);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeHidden();
-  await expect(page.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 
   await page.locator('#withdrawButton').click();
   await expect(page.locator('#withdrawModal')).toBeVisible();
