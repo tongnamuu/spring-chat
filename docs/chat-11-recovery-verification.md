@@ -42,3 +42,9 @@
 Jira 인증 환경변수가 없어 티켓 원문은 조회하지 못했다. 사용자가 명시한 세 가지 복구 동작과 웹 테스트를 기준으로 검증했다. Jira 상태는 변경하지 않았다.
 
 이 기록은 PR 반영 전 로컬 검증 결과다. main 병합은 별도 절차로 진행한다. 기존 `docs/chat-room-5000mps-plan.md`는 이 작업의 완료 범위에 포함하지 않는다.
+
+## 2026-10-22 P2 리뷰 수정
+
+`initWebSocket()`에 연결 세대별 10초 handshake 제한을 추가했다. STOMP `CONNECTED` 응답이 오지 않으면 소켓을 닫고 기존 backoff 재연결을 사용한다. 연결 성공, 오류, offline, 로그아웃에서 handshake 타이머를 해제한다. 성공 이후 구독 준비 제한 시간은 기존 별도 타이머로 유지한다.
+
+`node --test e2e/load/tail-sync.test.cjs`: 18개 통과(기존 12개 + handshake 관련 6개). 추가 검증은 미응답 시 재연결, 이전 연결의 늦은 CONNECTED/오류/timeout 무시, 성공 후 구독 준비 타이머 유지, 오류/offline/로그아웃 정리다. 실제 HTML의 스크립트와 제어 가능한 STOMP/소켓 대역으로 검증했다. 이번 수정에서 전체 Java 및 브라우저 E2E는 재실행하지 않았다.

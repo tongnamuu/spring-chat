@@ -267,6 +267,7 @@
         let roomSelectionVersion = 0;
         let roomSyncTimer = null;
         let readyTimer = null;
+        let handshakeTimer = null;
         let connectionVersion = 0;
         let reconnectAttempt = 0;
         let roomReady = false;
@@ -432,6 +433,8 @@
 
         function disconnectRealtime() {
             connectionVersion++;
+            clearTimeout(handshakeTimer);
+            handshakeTimer = null;
             clearTimeout(readyTimer);
             roomReady = false;
             roomSelectionVersion++;
@@ -534,6 +537,8 @@
             if (!currentUser) return;
             shouldReconnect = true;
             clearTimeout(reconnectTimer);
+            clearTimeout(handshakeTimer);
+            handshakeTimer = null;
             if (navigator.onLine === false) { setRealtimeStatus('오프라인'); return; }
             const version = ++connectionVersion;
             setRealtimeStatus('WS 연결 중');
@@ -549,9 +554,15 @@
             stompClient.debug = null;
             stompClient.heartbeat.outgoing = 10000;
             stompClient.heartbeat.incoming = 10000;
+            // Heartbeats start only after CONNECTED; bound the handshake separately.
+            handshakeTimer = setTimeout(() => {
+                if (version === connectionVersion) reconnectRealtime();
+            }, 10000);
             
             stompClient.connect({}, function (frame) {
                 if (version !== connectionVersion) return;
+                clearTimeout(handshakeTimer);
+                handshakeTimer = null;
                 console.log('Connected STOMP WebSocket: ' + frame);
                 setRealtimeStatus('WS 연결됨', !activeRoom);
                 stompClient.subscribe('/user/queue/publish-results', frame => {
@@ -579,6 +590,8 @@
         function reconnectRealtime(immediate = false) {
             if (!shouldReconnect || !currentUser) return;
             connectionVersion++;
+            clearTimeout(handshakeTimer);
+            handshakeTimer = null;
             roomSelectionVersion++;
             clearTimeout(readyTimer);
             clearTimeout(roomSyncTimer);

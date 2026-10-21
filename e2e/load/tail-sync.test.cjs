@@ -185,3 +185,88 @@ test('periodic head failure retries and a stale response cannot restart polling'
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(s.timers.size, 0);
 });
+
+function setupHandshake() {
+  const s = setup();
+  const attempts = [];
+  s.context.location = { hostname: 'localhost' };
+  s.context.SockJS = function () {
+    const socket = { closed: false, close() { this.closed = true; this.onClose?.(); } };
+    return socket;
+  };
+  s.context.Stomp = { over(socket) {
+    const client = {
+      connected: false, heartbeat: {}, subscriptions: [],
+      connect(headers, success, failure) {
+        this.success = () => { this.connected = true; success('CONNECTED'); };
+        this.failure = failure;
+        socket.onClose = failure;
+      },
+      subscribe(destination) { this.subscriptions.push(destination); return { unsubscribe() {} }; },
+      disconnect() { this.connected = false; }
+    };
+    attempts.push({ socket, client });
+    return client;
+  } };
+  s.run('activeRoom = null; initWebSocket()');
+  return { ...s, attempts };
+}
+
+test('missing CONNECTED closes the socket after 10 seconds and retries once', async () => {
+  const s = setupHandshake();
+  await s.tick(10000, 10000);
+  assert.equal(s.attempts[0].socket.closed, true);
+  assert.equal(s.run('stompClient'), null);
+  assert.equal(s.run('document.getElementById("statusText").innerText'), 'WS 재연결 중');
+  assert.equal(s.timers.size, 1);
+  await s.tick(750, 1250);
+  assert.equal(s.attempts.length, 2);
+  assert.equal(s.timers.size, 1);
+});
+
+test('late CONNECTED, error and timeout from the old attempt cannot affect a new handshake', async () => {
+  const s = setupHandshake();
+  const oldTimeout = [...s.timers.values()][0].callback;
+  await s.tick(10000, 10000);
+  await s.tick(750, 1250);
+  const newTimer = s.run('handshakeTimer');
+  s.attempts[0].client.success();
+  s.attempts[0].client.failure();
+  oldTimeout();
+  assert.equal(s.run('handshakeTimer'), newTimer);
+  assert.equal(s.timers.size, 1);
+  assert.equal(s.attempts[1].socket.closed, false);
+  assert.equal(s.attempts[1].client.subscriptions.length, 0);
+  assert.equal(s.run('document.getElementById("statusText").innerText'), 'WS 연결 중');
+  s.attempts[1].client.success();
+  assert.equal(s.timers.size, 0);
+  assert.deepEqual(s.attempts[1].client.subscriptions, ['/user/queue/publish-results']);
+  oldTimeout();
+  assert.equal(s.attempts[1].socket.closed, false);
+});
+
+test('CONNECTED cancels handshake timeout and starts the separate subscription deadline', () => {
+  const s = setupHandshake();
+  s.run('activeRoom = {roomId: 42}');
+  s.attempts[0].client.success();
+  assert.equal(s.run('handshakeTimer'), null);
+  assert.equal(s.timers.size, 1);
+  assert.equal(s.timers.has(s.run('readyTimer')), true);
+});
+
+for (const action of ['error', 'offline', 'logout']) {
+  test(`${action} cancels handshake deadline and ignores its late completion`, () => {
+    const s = setupHandshake();
+    if (action === 'error') s.attempts[0].client.failure();
+    if (action === 'offline') {
+      s.context.navigator.onLine = false;
+      s.run('reconnectRealtime()');
+    }
+    if (action === 'logout') s.run('disconnectRealtime(); resetToLogin()');
+    assert.equal(s.run('handshakeTimer'), null);
+    assert.equal(s.attempts[0].socket.closed, true);
+    s.attempts[0].client.success();
+    assert.equal(s.attempts[0].client.subscriptions.length, 0);
+    assert.equal(s.timers.size, action === 'error' ? 1 : 0);
+  });
+}
