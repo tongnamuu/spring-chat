@@ -1,6 +1,10 @@
 package com.example.chat.ws.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.session.Session;
@@ -18,16 +22,30 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
 
     private final StompAuthenticationChannelInterceptor authenticationInterceptor;
     private final FanoutBackpressure backpressure;
+    private final SubscriptionReadyInterceptor subscriptionReady;
+    private final TaskScheduler heartbeatScheduler;
 
-    public WebSocketConfig(StompAuthenticationChannelInterceptor authenticationInterceptor, FanoutBackpressure backpressure) {
+    public WebSocketConfig(StompAuthenticationChannelInterceptor authenticationInterceptor, FanoutBackpressure backpressure, SubscriptionReadyInterceptor subscriptionReady,
+            @Qualifier("chatHeartbeatScheduler") TaskScheduler heartbeatScheduler) {
         this.authenticationInterceptor = authenticationInterceptor;
         this.backpressure = backpressure;
+        this.subscriptionReady = subscriptionReady;
+        this.heartbeatScheduler = heartbeatScheduler;
+    }
+
+    @Bean
+    public static ThreadPoolTaskScheduler chatHeartbeatScheduler() {
+        var scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("chat-heartbeat-");
+        return scheduler;
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         // /sub topic for subscribing to messages
-        registry.enableSimpleBroker("/sub", "/queue");
+        registry.enableSimpleBroker("/sub", "/queue")
+                .setTaskScheduler(heartbeatScheduler).setHeartbeatValue(new long[]{10000, 10000});
         registry.setPreservePublishOrder(true);
         // /pub prefix for message routing
         registry.setApplicationDestinationPrefixes("/pub");
@@ -36,7 +54,7 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         super.configureClientInboundChannel(registration);
-        registration.interceptors(authenticationInterceptor);
+        registration.interceptors(authenticationInterceptor, subscriptionReady);
         registration.taskExecutor().corePoolSize(4).maxPoolSize(16).queueCapacity(1000);
     }
 

@@ -20,7 +20,7 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
 
   await expect(page.locator('#loginModal')).toBeHidden();
   await expect(page.locator('#userBadge')).toContainText(NICKNAME);
-  await expect(page.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 
   const authenticatedUser = await page.evaluate(async () => {
     const response = await fetch('/api/auth/me');
@@ -80,7 +80,7 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
   await page.reload();
   await expect(page.locator('#loginModal')).toBeHidden();
   await expect(page.locator('#userBadge')).toContainText(NICKNAME);
-  await expect(page.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 
   await page.locator('#logoutButton').click();
   await expect(page.locator('#loginModal')).toBeVisible();
@@ -93,7 +93,7 @@ test('CHAT-1 Redis session login, shared WS identity, refresh, and logout', asyn
   await page.locator('#passwordInput').fill(PASSWORD);
   await page.locator('#loginButton').click();
   await expect(page.locator('#loginModal')).toBeHidden();
-  await expect(page.locator('#statusText')).toHaveText('WS Zero-Downtime Connected');
+  await expect(page.locator('#statusText')).toHaveText('WS 연결됨');
 
   await page.locator('#logoutButton').click();
   await expect(page.locator('#loginModal')).toBeVisible();
