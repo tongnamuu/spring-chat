@@ -50,7 +50,8 @@ public class GlobalExceptionHandler {
             case INVALID_PASSWORD -> HttpStatus.UNAUTHORIZED;
             case USERNAME_ALREADY_EXISTS -> HttpStatus.CONFLICT;
             case ROOM_FULL, ALREADY_JOINED, INVALID_INVITE_CODE, INVALID_ROOM_CAPACITY, DIRECT_ROOM_INVALID -> HttpStatus.BAD_REQUEST;
-            case NOT_ROOM_MEMBER -> HttpStatus.FORBIDDEN;
+            case CANNOT_KICK_SELF -> HttpStatus.BAD_REQUEST;
+            case NOT_ROOM_MEMBER, NOT_ROOM_OWNER, ROOM_BANNED -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

@@ -58,6 +58,16 @@
         .input-area input:focus { border-color: #0284c7; }
         .input-area button { padding: 12px 24px; }
 
+        #manageMembersBtn { flex: none; margin: 0 16px; }
+        #membersModal .modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+        #membersModal h2 { margin-bottom: 12px; font-size: 1.2rem; }
+        #membersModal p { font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; margin-bottom: 12px; }
+        .member-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #334155; }
+        .member-row span { overflow-wrap: anywhere; }
+        .member-row .btn { flex: none; }
+        #membersList { margin-bottom: 16px; }
+        #membersError { color: #fca5a5; }
+
         /* Modal */
         .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
         .modal { background: #1e293b; padding: 28px; border-radius: 8px; width: min(400px, calc(100vw - 32px)); border: 1px solid #334155; }
@@ -121,6 +131,7 @@
                 <h3 id="currentRoomTitle">채팅방을 선택하세요</h3>
                 <p id="currentRoomMeta">소식함</p>
             </div>
+            <button class="btn btn-danger" id="manageMembersBtn" onclick="openMembers()" hidden>멤버 관리</button>
             <div class="status-indicator" id="statusIndicator">
                 <span class="dot"></span> <span id="statusText">로그인 후 연결</span>
             </div>
@@ -190,6 +201,16 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="membersModal">
+        <div class="modal">
+            <h2>멤버 관리</h2>
+            <p>강퇴된 멤버는 채팅 내역을 볼 수 없으며 초대 코드로 재입장할 수 없습니다.</p>
+            <div id="membersList"></div>
+            <p id="membersError" role="alert"></p>
+            <button class="btn btn-secondary" onclick="closeMembers()">닫기</button>
+        </div>
+    </div>
+
     <!-- Create Room Modal -->
     <div class="modal-overlay" id="createRoomModal">
         <div class="modal">
@@ -255,6 +276,8 @@
     <script>
         let currentUser = null;
         let activeRoom = null;
+        let roomListVersion = 0;
+        const removedRooms = new Set();
         let stompClient = null;
         let currentSubscription = null;
         let reconnectTimer = null;
@@ -445,6 +468,10 @@
             pendingRenderMessages = [];
             currentUser = null;
             activeRoom = null;
+            removedRooms.clear();
+            roomListVersion++;
+            closeMembers();
+            document.getElementById('manageMembersBtn').hidden = true;
             document.getElementById('userBadge').innerText = '로그인 필요';
             document.getElementById('withdrawButton').style.display = 'none';
             document.getElementById('logoutButton').style.display = 'none';
@@ -538,6 +565,14 @@
                     }
                 });
 
+                stompClient.subscribe('/user/queue/room-events', frame => {
+                    const event = JSON.parse(frame.body);
+                    if (event.type === 'KICKED') {
+                        removeRoomAccess(event.roomId, '방에서 강퇴되었습니다. 다른 채팅방을 선택해 주세요.');
+                        loadMyRooms().catch(console.error);
+                    }
+                });
+                loadMyRooms().catch(console.error);
                 if (activeRoom) {
                     historyLoading = true;
                     subscribeToRoom(activeRoom.roomId, false);
@@ -556,20 +591,119 @@
 
         async function loadMyRooms() {
             if (!currentUser) return;
+            const user = currentUser;
+            const version = ++roomListVersion;
             const res = await fetch('/api/rooms/my');
             if (res.ok) {
                 const rooms = await res.json();
-                renderRoomList(rooms);
+                if (currentUser !== user || version !== roomListVersion) return;
+                if (activeRoom && !rooms.some(room => room.roomId === activeRoom.roomId)) {
+                    removeRoomAccess(activeRoom.roomId);
+                }
+                if (activeRoom) {
+                    activeRoom = rooms.find(room => room.roomId === activeRoom.roomId);
+                    document.getElementById('manageMembersBtn').hidden = activeRoom.createdBy !== currentUser.userId;
+                    document.getElementById('currentRoomMeta').innerText = `초대코드: ${activeRoom.inviteCode} | 인원: ${activeRoom.currentCount}/${activeRoom.maxCapacity}명`;
+                }
+                renderRoomList(rooms.filter(room => !removedRooms.has(room.roomId)));
             } else if (res.status === 401) {
                 await logout();
+            }
+        }
+
+        function removeRoomAccess(roomId, notice = '더 이상 참여 중인 방이 아닙니다. 다른 채팅방을 선택해 주세요.') {
+            removedRooms.add(roomId);
+            roomListVersion++;
+            document.querySelectorAll('.room-item').forEach(item => {
+                if (Number(item.dataset.roomId) === roomId) item.remove();
+            });
+            roomMessageState.delete(roomId);
+            if (activeRoom?.roomId !== roomId) return;
+            roomSelectionVersion++; // Invalidates history, sync and member requests already in flight.
+            activeRoom = null;
+            if (currentSubscription) {
+                try { currentSubscription.unsubscribe(); } catch (_) {}
+                currentSubscription = null;
+            }
+            historyLoading = false;
+            pendingRoomMessages = [];
+            pendingRoomMessageCount = 0;
+            pendingRoomOverflow = false;
+            pendingRenderMessages = [];
+            if (renderFrame !== null) cancelAnimationFrame(renderFrame);
+            renderFrame = null;
+            closeMembers();
+            document.getElementById('manageMembersBtn').hidden = true;
+            document.getElementById('currentRoomTitle').innerText = '채팅방을 선택하세요';
+            document.getElementById('currentRoomMeta').innerText = notice;
+            document.getElementById('messagesContainer').replaceChildren();
+            document.getElementById('messageInput').value = '';
+            document.getElementById('messageInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+        }
+
+        // Pub/sub is best effort. Reconcile silent rooms and reconnects as well.
+        setInterval(() => { if (currentUser) loadMyRooms().catch(console.error); }, 5000);
+        window.addEventListener('focus', () => { if (currentUser) loadMyRooms().catch(console.error); });
+
+        function closeMembers() { document.getElementById('membersModal').style.display = 'none'; }
+
+        async function openMembers() {
+            if (!activeRoom || activeRoom.createdBy !== currentUser?.userId) return;
+            const room = activeRoom;
+            const version = roomSelectionVersion;
+            const isCurrent = () => activeRoom?.roomId === room.roomId && version === roomSelectionVersion;
+            document.getElementById('membersModal').style.display = 'flex';
+            document.getElementById('membersList').replaceChildren();
+            document.getElementById('membersError').textContent = '';
+            try {
+                const response = await fetch(`/api/rooms/${room.roomId}/members`);
+                if ([403, 404].includes(response.status)) {
+                    if (isCurrent()) removeRoomAccess(room.roomId);
+                    return;
+                }
+                if (!response.ok) throw new Error('멤버 목록을 불러오지 못했습니다.');
+                const members = await response.json();
+                if (!isCurrent()) return;
+                for (const member of members) {
+                    const row = document.createElement('div');
+                    row.className = 'member-row';
+                    const name = document.createElement('span');
+                    name.textContent = member.nickname + (member.userId === room.createdBy ? ' (방장)' : '');
+                    row.appendChild(name);
+                    if (member.userId !== currentUser.userId) {
+                        const button = document.createElement('button');
+                        button.className = 'btn btn-danger';
+                        button.textContent = '강퇴';
+                        button.onclick = async () => {
+                            if (!isCurrent() || !confirm(`${member.nickname}님을 강퇴하시겠습니까?`)) return;
+                            button.disabled = true;
+                            try {
+                                const result = await fetch(`/api/rooms/${room.roomId}/members/${member.userId}`, { method: 'DELETE' });
+                                if (!result.ok) throw new Error('강퇴하지 못했습니다. 방장 권한과 멤버 상태를 확인해 주세요.');
+                                if (!isCurrent()) return;
+                                row.remove();
+                                await loadMyRooms();
+                            } catch (error) {
+                                if (isCurrent()) document.getElementById('membersError').textContent = error.message;
+                                button.disabled = false;
+                            }
+                        };
+                        row.appendChild(button);
+                    }
+                    document.getElementById('membersList').appendChild(row);
+                }
+            } catch (error) {
+                if (isCurrent()) document.getElementById('membersError').textContent = error.message;
             }
         }
 
         function renderRoomList(rooms) {
             const container = document.getElementById('roomList');
             container.innerHTML = '';
-            rooms.forEach(room => {
+            rooms.filter(room => !removedRooms.has(room.roomId)).forEach(room => {
                 const div = document.createElement('div');
+                div.dataset.roomId = room.roomId;
                 div.className = `room-item ${activeRoom && activeRoom.roomId === room.roomId ? 'active' : ''}`;
                 div.onclick = () => selectRoom(room, false);
                 div.innerHTML = `
@@ -587,6 +721,9 @@
         }
 
         async function selectRoom(room, isFirstJoin = false) {
+            if (removedRooms.has(room.roomId)) return;
+            closeMembers();
+            document.getElementById('manageMembersBtn').hidden = room.createdBy !== currentUser?.userId;
             roomSelectionVersion++;
             activeRoom = room;
             historyLoading = true;
@@ -727,6 +864,10 @@
                 do {
                     pendingRoomOverflow = false;
                     const headResponse = await fetch(`/api/rooms/${roomId}/messages?limit=${initial ? 50 : 1}`);
+                    if ([403, 404].includes(headResponse.status)) {
+                        if (isCurrent()) removeRoomAccess(roomId);
+                        return;
+                    }
                     if (!headResponse.ok) throw new Error('History unavailable');
                     const head = await headResponse.json();
                     if (!isCurrent()) return;
@@ -738,6 +879,10 @@
                     // Freeze the upper bound; new live messages remain buffered.
                     while (state.lastReceivedMessageId < through) {
                         const res = await fetch(`/api/rooms/${roomId}/sync?lastReceivedMessageId=${state.lastReceivedMessageId}&throughMessageId=${through}`);
+                        if ([403, 404].includes(res.status)) {
+                            if (isCurrent()) removeRoomAccess(roomId);
+                            return;
+                        }
                         if (!res.ok) throw new Error('Sync unavailable');
                         const missed = await res.json();
                         if (!isCurrent()) return;

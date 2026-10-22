@@ -1,5 +1,6 @@
 package com.example.chat.ws.config;
 
+import com.example.chat.core.service.ChatRoomService;
 import com.example.chat.common.enums.UserStatus;
 import com.example.chat.core.repository.UserRepository;
 import com.example.chat.core.security.ChatPrincipal;
@@ -25,9 +26,11 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
     );
 
     private final UserRepository userRepository;
+    private final ChatRoomService rooms;
 
-    public StompAuthenticationChannelInterceptor(UserRepository userRepository) {
+    public StompAuthenticationChannelInterceptor(UserRepository userRepository, ChatRoomService rooms) {
         this.userRepository = userRepository;
+        this.rooms = rooms;
     }
 
     @Override
@@ -43,6 +46,21 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
                 || !(authentication.getPrincipal() instanceof ChatPrincipal principal)
                 || !userRepository.existsByUserIdAndStatus(principal.userId(), UserStatus.ACTIVE)) {
             throw new AccessDeniedException("Authenticated STOMP session required");
+        }
+        String destination = accessor.getDestination();
+        if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
+            Long roomId = RoomOutboundAccessInterceptor.roomId(destination);
+            if (roomId != null) {
+                rooms.requireMember(principal.userId(), roomId);
+            } else if (!"/user/queue/publish-results".equals(destination)
+                    && !"/user/queue/room-events".equals(destination)) {
+                // Reject wildcards and direct broker queues (including another user's queue).
+                throw new AccessDeniedException("Unsupported subscription destination");
+            }
+        }
+        if (accessor.getCommand() == StompCommand.SEND
+                && !"/pub/chat/message".equals(destination) && !"/pub/chat/messages".equals(destination)) {
+            throw new AccessDeniedException("Unsupported publication destination");
         }
         return message;
     }

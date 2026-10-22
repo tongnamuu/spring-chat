@@ -1,5 +1,7 @@
 package com.example.chat.api.controller;
 
+import com.example.chat.common.dto.RoomMemberDto;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import com.example.chat.common.dto.ChatMessageDto;
 import com.example.chat.common.dto.ChatRoomDto;
 import com.example.chat.common.dto.CreateRoomRequest;
@@ -53,6 +55,19 @@ public class ChatRoomController {
     ) {
         List<ChatRoomDto> rooms = chatRoomService.getMyJoinedRooms(principal.userId());
         return ResponseEntity.ok(rooms);
+    }
+
+    @GetMapping("/{roomId}/members")
+    public List<RoomMemberDto> getMembers(@AuthenticationPrincipal ChatPrincipal principal,
+            @PathVariable("roomId") Long roomId) {
+        return chatRoomService.getMembers(principal.userId(), roomId);
+    }
+
+    @DeleteMapping("/{roomId}/members/{userId}")
+    public ResponseEntity<Void> kickMember(@AuthenticationPrincipal ChatPrincipal principal,
+            @PathVariable("roomId") Long roomId, @PathVariable("userId") Long userId) {
+        chatRoomService.kickMember(principal.userId(), roomId, userId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{roomId}/messages")

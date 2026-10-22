@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class StompAuthenticationChannelInterceptorTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final StompAuthenticationChannelInterceptor interceptor = new StompAuthenticationChannelInterceptor(userRepository);
+    private final StompAuthenticationChannelInterceptor interceptor = new StompAuthenticationChannelInterceptor(userRepository, mock(com.example.chat.core.service.ChatRoomService.class));
 
     @Test
     void rejectsUnauthenticatedConnectAndSend() {
@@ -55,6 +55,8 @@ class StompAuthenticationChannelInterceptorTest {
     private Message<byte[]> message(StompCommand command, java.security.Principal principal) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setUser(principal);
+        if (command == StompCommand.SEND) accessor.setDestination("/pub/chat/message");
+        if (command == StompCommand.SUBSCRIBE) accessor.setDestination("/user/queue/publish-results");
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 }
