@@ -18,18 +18,18 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
 
     private final StompAuthenticationChannelInterceptor authenticationInterceptor;
     private final FanoutBackpressure backpressure;
+    private final RoomOutboundAccessInterceptor roomAccess;
 
-    public WebSocketConfig(StompAuthenticationChannelInterceptor authenticationInterceptor, FanoutBackpressure backpressure) {
+    public WebSocketConfig(StompAuthenticationChannelInterceptor authenticationInterceptor, FanoutBackpressure backpressure, RoomOutboundAccessInterceptor roomAccess) {
         this.authenticationInterceptor = authenticationInterceptor;
         this.backpressure = backpressure;
+        this.roomAccess = roomAccess;
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // /sub topic for subscribing to messages
         registry.enableSimpleBroker("/sub", "/queue");
         registry.setPreservePublishOrder(true);
-        // /pub prefix for message routing
         registry.setApplicationDestinationPrefixes("/pub");
     }
 
@@ -42,7 +42,7 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
 
     @Override
     public void configureClientOutboundChannel(ChannelRegistration registration) {
-        registration.interceptors(backpressure);
+        registration.interceptors(backpressure, roomAccess);
         registration.taskExecutor().corePoolSize(4).maxPoolSize(16).queueCapacity(1000);
     }
 
@@ -56,12 +56,14 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
             @Override
             public void afterConnectionEstablished(WebSocketSession session) throws Exception {
                 backpressure.connected(session);
+                roomAccess.connected(session);
                 super.afterConnectionEstablished(session);
             }
 
             @Override
             public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
                 backpressure.disconnected(session.getId());
+                roomAccess.disconnected(session.getId());
                 super.afterConnectionClosed(session, status);
             }
         });

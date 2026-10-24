@@ -85,6 +85,8 @@ class StompWithdrawalIntegrationTest {
     private Message<byte[]> message(StompCommand command, java.security.Principal principal) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setUser(principal);
+        if (command == StompCommand.SEND) accessor.setDestination("/pub/chat/message");
+        if (command == StompCommand.SUBSCRIBE) accessor.setDestination("/user/queue/publish-results");
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 }

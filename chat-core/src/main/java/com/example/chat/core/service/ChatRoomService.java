@@ -1,5 +1,10 @@
 package com.example.chat.core.service;
 
+import com.example.chat.common.dto.RoomMemberDto;
+import com.example.chat.common.dto.RoomMemberKicked;
+import com.example.chat.core.entity.ChatRoomBanEntity;
+import com.example.chat.core.repository.ChatRoomBanRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import com.example.chat.common.dto.ChatMessageDto;
 import com.example.chat.common.dto.ChatRoomDto;
 import com.example.chat.common.dto.CreateRoomRequest;
@@ -30,6 +35,8 @@ import java.util.stream.Collectors;
 @Service
 public class ChatRoomService {
 
+    private final ChatRoomBanRepository banRepository;
+    private final ApplicationEventPublisher events;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
@@ -39,8 +46,12 @@ public class ChatRoomService {
             ChatRoomRepository chatRoomRepository,
             ChatRoomMemberRepository chatRoomMemberRepository,
             UserRepository userRepository,
-            ChatMessageRepository chatMessageRepository
+            ChatMessageRepository chatMessageRepository,
+            ChatRoomBanRepository banRepository,
+            ApplicationEventPublisher events
     ) {
+        this.banRepository = banRepository;
+        this.events = events;
         this.chatRoomRepository = chatRoomRepository;
         this.chatRoomMemberRepository = chatRoomMemberRepository;
         this.userRepository = userRepository;
@@ -74,7 +85,6 @@ public class ChatRoomService {
 
         ChatRoomEntity savedRoom = chatRoomRepository.save(room);
 
-        // Add creator as OWNER
         ChatRoomMemberEntity ownerMember = ChatRoomMemberEntity.builder()
                 .roomId(savedRoom.getRoomId())
                 .userId(creator.getUserId())
@@ -83,7 +93,6 @@ public class ChatRoomService {
 
         chatRoomMemberRepository.save(ownerMember);
 
-        // If DIRECT chat, add target user as well
         if (request.getRoomType() == RoomType.DIRECT && request.getTargetUserId() != null) {
             UserEntity targetUser = userRepository.findById(request.getTargetUserId())
                     .filter(user -> user.getStatus() == UserStatus.ACTIVE)
@@ -111,6 +120,10 @@ public class ChatRoomService {
 
         ChatRoomEntity room = chatRoomRepository.findByInviteCodeForUpdate(inviteCode)
                 .orElseThrow(() -> new ChatException(ErrorCode.INVALID_INVITE_CODE));
+
+        if (banRepository.existsByRoomIdAndUserId(room.getRoomId(), userId)) {
+            throw new ChatException(ErrorCode.ROOM_BANNED);
+        }
 
         if (chatRoomMemberRepository.existsByRoomIdAndUserId(room.getRoomId(), user.getUserId())) {
             throw new ChatException(ErrorCode.ALREADY_JOINED);
@@ -145,9 +158,7 @@ public class ChatRoomService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getMessageHistory(Long userId, Long roomId, int limit) {
-        if (!chatRoomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
-            throw new ChatException(ErrorCode.NOT_ROOM_MEMBER);
-        }
+        requireMember(userId, roomId);
 
         List<ChatMessageEntity> messages = chatMessageRepository.findByRoomIdOrderByMessageIdDesc(
                 roomId, PageRequest.of(0, Math.max(1, Math.min(limit, 100)))
@@ -163,13 +174,50 @@ public class ChatRoomService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getMissedMessages(Long userId, Long roomId, Long lastReceivedMessageId, Long throughMessageId) {
-        if (!chatRoomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
-            throw new ChatException(ErrorCode.NOT_ROOM_MEMBER);
-        }
+        requireMember(userId, roomId);
 
         List<ChatMessageEntity> missedMessages = chatMessageRepository.findMissedMessages(
                 roomId, lastReceivedMessageId, throughMessageId, PageRequest.of(0, 500));
         return convertMessagesToDtos(missedMessages);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireMember(Long userId, Long roomId) {
+        if (!chatRoomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
+            throw new ChatException(ErrorCode.NOT_ROOM_MEMBER);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<RoomMemberDto> getMembers(Long userId, Long roomId) {
+        requireMember(userId, roomId);
+        var members = chatRoomMemberRepository.findByRoomId(roomId);
+        var users = userRepository.findAllById(members.stream().map(ChatRoomMemberEntity::getUserId).toList())
+                .stream().collect(Collectors.toMap(UserEntity::getUserId, Function.identity()));
+        return members.stream().map(member -> new RoomMemberDto(member.getUserId(),
+                users.containsKey(member.getUserId()) ? users.get(member.getUserId()).getNickname() : UserEntity.WITHDRAWN_NICKNAME,
+                member.getRole())).toList();
+    }
+
+    @Transactional
+    public void kickMember(Long actorId, Long roomId, Long targetId) {
+        ChatRoomEntity room = chatRoomRepository.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new ChatException(ErrorCode.ROOM_NOT_FOUND));
+        if (!room.getCreatedBy().equals(actorId)
+                || !chatRoomMemberRepository.existsByRoomIdAndUserId(roomId, actorId)
+                || !userRepository.existsByUserIdAndStatus(actorId, UserStatus.ACTIVE)) {
+            throw new ChatException(ErrorCode.NOT_ROOM_OWNER);
+        }
+        if (actorId.equals(targetId)) throw new ChatException(ErrorCode.CANNOT_KICK_SELF);
+        if (banRepository.existsByRoomIdAndUserId(roomId, targetId)) return;
+        ChatRoomMemberEntity member = chatRoomMemberRepository.findByRoomIdAndUserId(roomId, targetId)
+                .orElseThrow(() -> new ChatException(ErrorCode.NOT_ROOM_MEMBER));
+        UserEntity target = userRepository.findById(targetId)
+                .orElseThrow(() -> new ChatException(ErrorCode.USER_NOT_FOUND));
+        banRepository.save(new ChatRoomBanEntity(roomId, targetId, actorId));
+        chatRoomMemberRepository.delete(member);
+        room.setCurrentCount(room.getCurrentCount() - 1);
+        events.publishEvent(new RoomMemberKicked(roomId, targetId, target.getUsername()));
     }
 
     private String generateUniqueInviteCode() {

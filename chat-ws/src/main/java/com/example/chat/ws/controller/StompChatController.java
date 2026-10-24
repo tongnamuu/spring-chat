@@ -3,6 +3,7 @@ package com.example.chat.ws.controller;
 import com.example.chat.common.dto.ChatMessageDto;
 import com.example.chat.common.enums.MessageType;
 import com.example.chat.core.security.ChatPrincipal;
+import com.example.chat.core.service.ChatRoomService;
 import com.example.chat.ws.producer.KafkaMessageProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class StompChatController {
     private static final Logger log = LoggerFactory.getLogger(StompChatController.class);
 
     private final KafkaMessageProducer kafkaMessageProducer;
+    private final ChatRoomService rooms;
 
     @org.springframework.beans.factory.annotation.Value("${chat.ws.debug-node:false}")
     private boolean debugNode;
@@ -31,8 +33,9 @@ public class StompChatController {
     @org.springframework.beans.factory.annotation.Value("${chat.ws.node-id:chat-ws}")
     private String nodeId;
 
-    public StompChatController(KafkaMessageProducer kafkaMessageProducer) {
+    public StompChatController(KafkaMessageProducer kafkaMessageProducer, ChatRoomService rooms) {
         this.kafkaMessageProducer = kafkaMessageProducer;
+        this.rooms = rooms;
     }
 
     @MessageMapping("/chat/messages")
@@ -42,6 +45,9 @@ public class StompChatController {
             throw new IllegalArgumentException("A batch must contain 1 to 100 messages");
         }
         messages.forEach(this::validateMessage);
+        ChatPrincipal sender = authenticatedPrincipal(principal);
+        messages.stream().map(ChatMessageDto::getRoomId).distinct()
+                .forEach(roomId -> rooms.requireMember(sender.userId(), roomId));
         var publications = messages.stream().map(message -> message(message, principal)).toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(publications).thenApply(ignored -> new PublishResult(true));
     }
@@ -51,6 +57,7 @@ public class StompChatController {
     public CompletableFuture<PublishResult> message(ChatMessageDto message, Principal principal) {
         ChatPrincipal chatPrincipal = authenticatedPrincipal(principal);
         validateMessage(message);
+        rooms.requireMember(chatPrincipal.userId(), message.getRoomId());
         message.setMessageId(null);
         message.setSourceNode(debugNode ? nodeId : null);
         message.setEventId(UUID.randomUUID().toString());

@@ -11,6 +11,9 @@ public enum ErrorCode {
     INVALID_INVITE_CODE("R005", "Invalid invitation code"),
     INVALID_ROOM_CAPACITY("R006", "Capacity must be between 2 and 1500"),
     DIRECT_ROOM_INVALID("R007", "Direct chat room capacity must be exactly 2"),
+    NOT_ROOM_OWNER("R008", "Only the room owner can remove members"),
+    CANNOT_KICK_SELF("R009", "The room owner cannot remove themselves"),
+    ROOM_BANNED("R010", "You have been removed from this room"),
     INTERNAL_SERVER_ERROR("S001", "Internal server error");
 
     private final String code;
