@@ -73,7 +73,6 @@ class RoomAccessInterceptorTest {
         var other = delivery("/sub/chat/room/99");
         ordered.send(revoked);
         ordered.send(other);
-        // Authorization changes while the first delivery is queued on the executor.
         when(members.existsByRoomIdAndUserId(42L, 7L)).thenReturn(false);
         while (!tasks.isEmpty()) tasks.removeFirst().run();
         assertThat(delivered).containsExactly(other);

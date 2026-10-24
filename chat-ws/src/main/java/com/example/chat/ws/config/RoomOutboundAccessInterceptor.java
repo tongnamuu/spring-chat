@@ -51,16 +51,12 @@ public class RoomOutboundAccessInterceptor implements ExecutorChannelInterceptor
         if (roomId == null) return message;
         String sessionId = SimpMessageHeaderAccessor.getSessionId(message.getHeaders());
         Long userId = sessionId == null ? null : sessionUsers.get(sessionId);
-        // Recheck on the executor, after any outbound queue delay. No stale membership cache,
-        // so revocation applies on every WS node even when the Redis notification is lost.
         boolean allowed = false;
         try {
             allowed = userId != null && members.existsByRoomIdAndUserId(roomId, userId);
             return allowed ? message : null;
         } finally {
             if (!allowed) {
-                // A discarded frame never reaches the transport or later executor interceptors.
-                // Release its ordered queue slot so other rooms and control events still flow.
                 Runnable next = OrderedMessageChannelDecorator.getNextMessageTask(message);
                 if (next != null) next.run();
             }

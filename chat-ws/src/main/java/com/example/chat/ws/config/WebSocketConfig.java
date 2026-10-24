@@ -28,10 +28,8 @@ public class WebSocketConfig extends AbstractSessionWebSocketMessageBrokerConfig
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // /sub topic for subscribing to messages
         registry.enableSimpleBroker("/sub", "/queue");
         registry.setPreservePublishOrder(true);
-        // /pub prefix for message routing
         registry.setApplicationDestinationPrefixes("/pub");
     }
 

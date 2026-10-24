@@ -28,15 +28,12 @@ public class RoomKickNotifications {
         listener.setConnectionFactory(connections);
         listener.addMessageListener((message, pattern) -> {
             var event = mapper.readValue(message.getBody(), RoomMemberKicked.class);
-            // Each node notifies all local sessions belonging to this user, including other tabs.
             var user = registry.getObject().getUser(event.username());
             if (user == null) return;
             String destination = "/sub/chat/room/" + event.roomId();
             for (var session : user.getSessions()) {
                 for (var subscription : session.getSubscriptions()) {
                     if (!destination.equals(subscription.getDestination())) continue;
-                    // Revoke on the server before notifying the client. No client UNSUBSCRIBE
-                    // or socket close is required; other rooms on this connection stay usable.
                     var unsubscribe = SimpMessageHeaderAccessor.create(SimpMessageType.UNSUBSCRIBE);
                     unsubscribe.setSessionId(session.getId());
                     unsubscribe.setSubscriptionId(subscription.getId());
@@ -44,8 +41,6 @@ public class RoomKickNotifications {
                     broker.getObject().getSubscriptionRegistry().unregisterSubscription(frame);
                     events.publishEvent(new SessionUnsubscribeEvent(this, frame, user.getPrincipal()));
                 }
-                // Build a distinct mutable message per session: ordered broker delivery must
-                // not reuse a header accessor already frozen by another session's transport.
                 var headers = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
                 headers.setSessionId(session.getId());
                 headers.setLeaveMutable(true);

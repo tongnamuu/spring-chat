@@ -54,7 +54,6 @@ public class StompAuthenticationChannelInterceptor implements ChannelInterceptor
                 rooms.requireMember(principal.userId(), roomId);
             } else if (!"/user/queue/publish-results".equals(destination)
                     && !"/user/queue/room-events".equals(destination)) {
-                // Reject wildcards and direct broker queues (including another user's queue).
                 throw new AccessDeniedException("Unsupported subscription destination");
             }
         }

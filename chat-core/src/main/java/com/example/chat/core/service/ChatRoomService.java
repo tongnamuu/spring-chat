@@ -85,7 +85,6 @@ public class ChatRoomService {
 
         ChatRoomEntity savedRoom = chatRoomRepository.save(room);
 
-        // Add creator as OWNER
         ChatRoomMemberEntity ownerMember = ChatRoomMemberEntity.builder()
                 .roomId(savedRoom.getRoomId())
                 .userId(creator.getUserId())
@@ -94,7 +93,6 @@ public class ChatRoomService {
 
         chatRoomMemberRepository.save(ownerMember);
 
-        // If DIRECT chat, add target user as well
         if (request.getRoomType() == RoomType.DIRECT && request.getTargetUserId() != null) {
             UserEntity targetUser = userRepository.findById(request.getTargetUserId())
                     .filter(user -> user.getStatus() == UserStatus.ACTIVE)
@@ -203,7 +201,6 @@ public class ChatRoomService {
 
     @Transactional
     public void kickMember(Long actorId, Long roomId, Long targetId) {
-        // Same room lock as joins and account withdrawal: count and membership change together.
         ChatRoomEntity room = chatRoomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new ChatException(ErrorCode.ROOM_NOT_FOUND));
         if (!room.getCreatedBy().equals(actorId)
@@ -212,7 +209,6 @@ public class ChatRoomService {
             throw new ChatException(ErrorCode.NOT_ROOM_OWNER);
         }
         if (actorId.equals(targetId)) throw new ChatException(ErrorCode.CANNOT_KICK_SELF);
-        // Repeated requests are idempotent, including concurrent requests.
         if (banRepository.existsByRoomIdAndUserId(roomId, targetId)) return;
         ChatRoomMemberEntity member = chatRoomMemberRepository.findByRoomIdAndUserId(roomId, targetId)
                 .orElseThrow(() -> new ChatException(ErrorCode.NOT_ROOM_MEMBER));

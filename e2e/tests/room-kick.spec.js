@@ -124,7 +124,6 @@ test('a socket kick event immediately exits the open room before room-list refre
     }) };
     initWebSocket();
     subscriptions.get('/user/queue/room-events')({ body: JSON.stringify({ type: 'KICKED', roomId: 42 }) });
-    // Inspect state synchronously: no polling or HTTP response is needed to exit.
     window.immediateExit = activeRoom === null && pendingRenderMessages.length === 0
       && document.getElementById('messagesContainer').children.length === 0;
   });

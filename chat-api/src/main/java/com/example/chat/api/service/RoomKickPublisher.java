@@ -24,7 +24,6 @@ public class RoomKickPublisher {
         try {
             redis.convertAndSend(RoomMemberKicked.CHANNEL, mapper.writeValueAsString(event));
         } catch (RuntimeException failure) {
-            // Authorization always uses the committed DB membership. The UI also reconciles on a timer.
             log.warn("Failed to notify removal from room {} for user {}", event.roomId(), event.userId(), failure);
         }
     }

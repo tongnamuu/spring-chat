@@ -89,18 +89,16 @@ class RoomKickWebSocketIntegrationTest {
             assertThat(second.next()).contains("before-kick");
             assertThat(ownerSocket.next()).contains("before-kick");
             rooms.kickMember(owner.getUserId(), room.getRoomId(), member.getUserId());
-            // Simulate the API's committed event on the shared Redis channel.
             redis.convertAndSend(RoomMemberKicked.CHANNEL, mapper.writeValueAsString(
                     new RoomMemberKicked(room.getRoomId(), member.getUserId(), member.getUsername())));
             assertThat(first.next()).contains("KICKED");
             assertThat(second.next()).contains("KICKED");
-            // Neither socket sends UNSUBSCRIBE: both are evicted by the server itself.
             var deliveryHeaders = org.springframework.messaging.simp.SimpMessageHeaderAccessor.create(
                     org.springframework.messaging.simp.SimpMessageType.MESSAGE);
             deliveryHeaders.setDestination(destination);
             var roomSubscriptions = broker.getSubscriptionRegistry().findSubscriptions(
                     org.springframework.messaging.support.MessageBuilder.createMessage(new byte[0], deliveryHeaders.getMessageHeaders()));
-            assertThat(roomSubscriptions).hasSize(1); // Only the owner's session remains.
+            assertThat(roomSubscriptions).hasSize(1);
             assertThat(registry.getUser(member.getUsername()).getSessions().stream()
                     .flatMap(session -> session.getSubscriptions().stream())
                     .filter(subscription -> destination.equals(subscription.getDestination()))).isEmpty();
@@ -112,14 +110,10 @@ class RoomKickWebSocketIntegrationTest {
             first.send("SEND\ndestination:/pub/chat/message\ncontent-type:application/json\n\n{\"roomId\":"
                     + room.getRoomId() + ",\"messageType\":\"TALK\",\"content\":\"forbidden\"}\0");
             assertThat(first.next()).contains("\"accepted\":false");
-            // A fresh subscription to the removed room is rejected at the STOMP boundary.
             second.send("SUBSCRIBE\nid:forbidden\ndestination:" + destination + "\n\n\0");
-            // With preserveReceiveOrder, the ordered channel logs a denied frame and continues.
-            // Use a subsequent allowed subscription as a barrier proving the denial was processed.
             second.send("SUBSCRIBE\nid:after-denial\ndestination:/user/queue/publish-results\n\n\0");
             await().atMost(Duration.ofSeconds(5)).until(() -> !registry.findSubscriptions(
                     subscription -> "after-denial".equals(subscription.getId())).isEmpty());
-            // The user registry is event bookkeeping; only the broker's registry controls delivery.
             var headers = org.springframework.messaging.simp.SimpMessageHeaderAccessor.create(
                     org.springframework.messaging.simp.SimpMessageType.MESSAGE);
             headers.setDestination(destination);
